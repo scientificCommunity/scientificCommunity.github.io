@@ -1,4 +1,4 @@
-hexo clean&&hexo deploy
+#hexo clean&&hexo deploy
 git add .
 if [ ! "$1" ]
 then
