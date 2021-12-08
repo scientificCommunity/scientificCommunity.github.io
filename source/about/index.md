@@ -7,7 +7,7 @@ date: 2021-12-08 18:11:08
 
 - 🔭 I’m currently working on [mampod](https://github.com/scientificCommunity)
 - 🌱 I’m currently learning [Rust](https://www.rust-lang.org/)
-- 📫 How to reach me: [rivers.boat.snow@gmail.com](https://www.rust-lang.org/)
+- 📫 How to reach me: [rivers.boat.snow@gmail.com](mailto:rivers.boat.snow@gmail.com)
 - 😄 Pronouns: 穹柏
 ---
 
