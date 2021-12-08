@@ -106,3 +106,10 @@ deploy:
   type: git
   branch: gh-pages
   repo: git@github.com:scientificCommunity/scientificCommunity.github.io.git
+
+# 本地搜索
+search:
+  path: search.xml
+  field: post
+  format: html
+  limit: 100
