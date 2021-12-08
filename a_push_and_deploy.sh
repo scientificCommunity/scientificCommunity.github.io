@@ -1,5 +1,10 @@
-hexo clean&&hexo deploy
+#hexo clean&&hexo deploy
 git add .
-curr_date_time="`date +%Y-%m-%d,%H:%m:%s`"  
-git commit -m "auto commit $curr_date_time"
+if [ ! "$1" ]
+then
+  curr_date_time=$(date "+%Y-%m-%d %H:%M:%S")
+  git commit -m "auto commit $curr_date_time"
+else
+  git commit -m "$1"
+fi
 git push
