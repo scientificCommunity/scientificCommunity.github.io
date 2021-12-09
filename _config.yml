@@ -136,3 +136,7 @@ symbols_count_time:
   wpm: 275
   # Allow to exclude all content inside code blocks for more accurate words counting. If not defined, false will be used as default.
   exclude_codeblock: true
+
+# 通用站点地图
+sitemap:
+  path: sitemap.xml
