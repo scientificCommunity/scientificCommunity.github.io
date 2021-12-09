@@ -1,7 +1,8 @@
 ---
 title: 杂谈之非root用户运行docker命令
-date: 2021-12-08 14:57:59
-tags:
+date: 2021-09-19 23:36:42 
+tags: 技术
+categories: 技术
 ---
 
 # 步骤
