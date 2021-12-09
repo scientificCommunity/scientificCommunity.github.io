@@ -127,3 +127,12 @@ feed:
   icon: icon.png
   autodiscovery: true
   template:
+
+# 字数统计、阅读时长
+symbols_count_time:
+  # Average Word Length (chars count in word). Default: 4
+  awl: 2
+  # Words Per Minute. Default: 275
+  wpm: 275
+  # Allow to exclude all content inside code blocks for more accurate words counting. If not defined, false will be used as default.
+  exclude_codeblock: true
