@@ -472,7 +472,8 @@ exturl: false
 
 # Google Webmaster tools verification.
 # See: https://www.google.com/webmasters
-google_site_verification: dAEXqqGBo9pJ5H-Rd3DBK9vd8XTKa7uqPUTqfxdymBo
+# google_site_verification: dAEXqqGBo9pJ5H-Rd3DBK9vd8XTKa7uqPUTqfxdymBo
+google_site_verification: 
 
 # Bing Webmaster tools verification.
 # See: https://www.bing.com/webmaster
