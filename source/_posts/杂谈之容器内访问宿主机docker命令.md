@@ -1,5 +1,6 @@
 ---
 title: 杂谈之容器内访问宿主机docker命令
+abbrlink: 47873
 date: 2021-09-20 08:42:56
 tags:
 ---
