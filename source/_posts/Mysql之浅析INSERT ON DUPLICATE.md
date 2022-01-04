@@ -1,6 +1,11 @@
 ---
-abbrlink: 0
+title: Mysql之浅析INSERT ON DUPLICATE
+tags: 技术
+categories: 技术
+abbrlink: 10744
+date: 2022-01-04 14:00:00
 ---
+
 # 前言
 如果不特别指出，默认mysql版本为8.0
 # 简介
