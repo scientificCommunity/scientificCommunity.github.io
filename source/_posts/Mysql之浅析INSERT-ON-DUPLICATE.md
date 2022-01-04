@@ -1,6 +1,8 @@
 ---
 title: Mysql之浅析INSERT ON DUPLICATE
-tags: 技术, Mysql
+tags:
+  -  技术
+  -  Mysql
 categories: 技术
 abbrlink: 34049
 date: 2022-01-04 14:00:00
