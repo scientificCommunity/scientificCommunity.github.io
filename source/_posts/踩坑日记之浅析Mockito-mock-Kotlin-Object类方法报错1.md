@@ -1,8 +1,8 @@
 ---
 title: 踩坑日记之浅析Mockito mock Kotlin Object类方法报错
 abbrlink: 48796
-date: 2022-02-09 18:18:12
-tags:
+date: 2021-09-12 23:38:56
+tags: 技术
 ---
 比如我创建一个`Kotlin` `Object`类：`ObjectMethod`
 
