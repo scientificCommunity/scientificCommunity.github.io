@@ -9,7 +9,7 @@ abbrlink: 34050
 ---
 `AUTO_INCREMENT`用于为表中的列设置一个自增序列，在非集群模式下，用它来为主键列自动生成值是一件很方便的事。并且，Mysql提供了一系列的锁机制来保证它的性能跟可靠性，通过这些锁机制，我们可以让它变得很高效。
 
-### 术语
+## 术语
 
 先来了解后面将要用到的术语。
 
@@ -86,3 +86,10 @@ abbrlink: 34050
 2. 主从，
     1. 复制模式为`statement-based`，设置`innodb_autoinc_lock_mode=1`
     2. 复制模式为`row based`或者`mixed-format`，设置`innodb_autoinc_lock_mode=2`
+
+## 参考链接
+
+- ****[15.6.1.6 AUTO_INCREMENT Handling in InnoDB](https://dev.mysql.com/doc/refman/8.0/en/innodb-auto-increment-handling.html#innodb-auto-increment-lock-mode-usage-implications)****
+- **[15.18.2 InnoDB Recovery](https://dev.mysql.com/doc/refman/8.0/en/innodb-recovery.html)**
+- ****[17.5.1.1 Replication and AUTO_INCREMENT](https://dev.mysql.com/doc/refman/8.0/en/replication-features-auto-increment.html)****
+- **[3.6.9 Using AUTO_INCREMENT](https://dev.mysql.com/doc/refman/8.0/en/example-auto-increment.html)**
