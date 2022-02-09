@@ -15,11 +15,11 @@ abbrlink: 34050
 
 - Simple inserts
     
-    能预先知道插入行数的语句。比如说单行插入（不包括`[INSERT ... ON DUPLICATE KEY UPDATE](https://dev.mysql.com/doc/refman/8.0/en/insert-on-duplicate.html)`），不带子句的多行插入（自增列不赋值或全赋值）。
+    能预先知道插入行数的语句。比如说单行插入（不包括[INSERT ... ON DUPLICATE KEY UPDATE](https://dev.mysql.com/doc/refman/8.0/en/insert-on-duplicate.html)），不带子句的多行插入（自增列不赋值或全赋值）。
     
 - Bulk inserts
     
-    不能能预先知道插入行数的语句。比如`[INSERT ... SELECT](https://dev.mysql.com/doc/refman/8.0/en/insert-select.html)`, `[REPLACE ... SELECT](https://dev.mysql.com/doc/refman/8.0/en/replace.html)` 。这种模式下，`InnoDB` 会在处理时为每一行的自增列一次分配一个自增值
+    不能能预先知道插入行数的语句。比如[INSERT ... SELECT](https://dev.mysql.com/doc/refman/8.0/en/insert-select.html), [REPLACE ... SELECT](https://dev.mysql.com/doc/refman/8.0/en/replace.html) 。这种模式下，`InnoDB` 会在处理时为每一行的自增列一次分配一个自增值
     
 - Mixed-mode inserts
     
@@ -27,7 +27,7 @@ abbrlink: 34050
     INSERT INTO t1 (c1,c2) VALUES (1,'a'), (NULL,'b'), (5,'c'), (NULL,'d');
     ```
     
-    `[INSERT ... ON DUPLICATE KEY UPDATE](https://dev.mysql.com/doc/refman/8.0/en/insert-on-duplicate.html)`
+    [INSERT ... ON DUPLICATE KEY UPDATE](https://dev.mysql.com/doc/refman/8.0/en/insert-on-duplicate.html)
     
 - Insert-like
     
@@ -52,7 +52,7 @@ abbrlink: 34050
     
     所以，在`consecutive`模式，多事务并发执行`Simple inserts`这类语句时， 相对traditional模式，性能会有比较大的提升。
     
-    由于一开始就为语句分配了所有需要的自增值，那么对于像`Mixed-mode inserts`这类语句，就有可能多分配了一些值给它，从而导致自增序列出现**”空隙”**。而`traditional`模式因为每一次只会为一条记录分配自增值，所有不会有这种问题。
+    由于一开始就为语句分配了所有需要的自增值，那么对于像`Mixed-mode inserts`这类语句，就有可能多分配了一些值给它，从而导致自增序列出现"**空隙**"。而`traditional`模式因为每一次只会为一条记录分配自增值，所有不会有这种问题。
     
     另外，对于`Bulk inserts`语句，依然会采取`AUTO-INC`锁。所以，如果有一条`Bulk inserts`语句正在执行的话，`Simple inserts`也必须等到该语句执行完毕才能继续执行。
     
@@ -68,7 +68,7 @@ abbrlink: 34050
 - 自增值的生成后是不能回滚的，所以自增值生成后，事务回滚了，那么那些已经生成的自增值就丢失了，从而使自增列的数据出现空隙
 - 正常情况下，自增列是不存在`0`这个值的。所以，如果插入语句中对自增列设置的值为`0`或者`null`，就会自动应用自增序列。
     
-    那么，如果想在自增列中插入为0这个值，怎么办呢？可以通过将`[SQL Mode](https://dev.mysql.com/doc/refman/8.0/en/sql-mode.html#sqlmode_no_auto_value_on_zero)`设置为`NO_AUTO_VALUE_ON_ZERO`即可
+    那么，如果想在自增列中插入为0这个值，怎么办呢？可以通过将[SQL Mode](https://dev.mysql.com/doc/refman/8.0/en/sql-mode.html#sqlmode_no_auto_value_on_zero)设置为`NO_AUTO_VALUE_ON_ZERO`即可
     
 - 在Mysql5.7以及更早之前，自增序列的计数器(`auto-increment counter`)是保存在内存中的。`auto-increment counter`在每次Mysql重新启动后通过类似下面的这种语句进行初始化：
     
@@ -76,20 +76,21 @@ abbrlink: 34050
     SELECT MAX(AUTO_INC_COLUMN) FROM table_name FOR UPDATE
     ```
     
-    而从`Mysql8`开始，`auto-increment counter`被存储在了`redo log`中，并且每次变化都会刷新到`redo log`中。另外，我们可以通过`[ALTER TABLE ... AUTO_INCREMENT = N](https://dev.mysql.com/doc/refman/8.0/en/alter-table.html)` 来主动修改
+    而从`Mysql8`开始，`auto-increment counter`被存储在了`redo log`中，并且每次变化都会刷新到`redo log`中。另外，我们可以通过[ALTER TABLE ... AUTO_INCREMENT = N](https://dev.mysql.com/doc/refman/8.0/en/alter-table.html) 来主动修改
     `auto-increment counter`。
     
 
 ## 总结
 
 1. 单实例下，可以设置`innodb_autoinc_lock_mode=2`
-2. 主从，
+2. 主从
     1. 复制模式为`statement-based`，设置`innodb_autoinc_lock_mode=1`
     2. 复制模式为`row based`或者`mixed-format`，设置`innodb_autoinc_lock_mode=2`
+    
 
 ## 参考链接
 
-- ****[15.6.1.6 AUTO_INCREMENT Handling in InnoDB](https://dev.mysql.com/doc/refman/8.0/en/innodb-auto-increment-handling.html#innodb-auto-increment-lock-mode-usage-implications)****
-- **[15.18.2 InnoDB Recovery](https://dev.mysql.com/doc/refman/8.0/en/innodb-recovery.html)**
-- ****[17.5.1.1 Replication and AUTO_INCREMENT](https://dev.mysql.com/doc/refman/8.0/en/replication-features-auto-increment.html)****
-- **[3.6.9 Using AUTO_INCREMENT](https://dev.mysql.com/doc/refman/8.0/en/example-auto-increment.html)**
+- ****[15.6.1.6 AUTO_INCREMENT Handling in InnoDB](https://dev.mysql.com/doc/refman/8.0/en/innodb-auto-increment-handling.html#innodb-auto-increment-lock-mode-usage-implications)****
+- **[15.18.2 InnoDB Recovery](https://dev.mysql.com/doc/refman/8.0/en/innodb-recovery.html)**
+- ****[17.5.1.1 Replication and AUTO_INCREMENT](https://dev.mysql.com/doc/refman/8.0/en/replication-features-auto-increment.html)****
+- **[3.6.9 Using AUTO_INCREMENT](https://dev.mysql.com/doc/refman/8.0/en/example-auto-increment.html)**
