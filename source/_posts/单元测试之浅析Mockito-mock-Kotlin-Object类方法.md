@@ -7,6 +7,9 @@ tags:
   - 踩坑
 categories: 技术
 ---
+`Kotlin`里有一种`object`类型的类，它在使用上跟`Java`里的静态类很相似。事实上，它们编译后确实很相似，只不过`Kotlin`在语法层面上隐藏了一些实现细节，这些细节如果不清楚的话往往会引发一些意料之外的错误。
+`Mockito`是可以直接`mock`静态方法的，而`Mockito`在`mock`这种`Kotlin`类里定义的"静态方法"时却会直接报错，为什么呢？
+
 比如我创建一个`Kotlin` `Object`类：`ObjectMethod`
 
 ```kotlin
