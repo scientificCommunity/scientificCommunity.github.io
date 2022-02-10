@@ -2,7 +2,9 @@
 title: 杂谈之容器内访问宿主机docker命令
 abbrlink: 47873
 date: 2021-09-20 08:42:56
-tags:
+tags: 技术
+categories: 技术
+description: docker在被安装时会在/var/lib/docker.sock目录下创建unix domain socket...
 ---
 # 原理
 `docker`在被安装时默认会在`/var/lib/docker.sock`创建`unix domain socket`。`docker daemon`会通过它来监听[Docker Engine API](https://docs.docker.com/engine/api/) 请求。而`docker`命令本质上是在`/bin/docker`里包装了这些请求交互的细节(猜想，有研究过的朋友可以分享一下🤝)。所以我们只需要将这两个文件挂载到容器中即可。

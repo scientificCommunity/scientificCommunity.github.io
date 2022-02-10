@@ -6,6 +6,7 @@ tags:
 categories: 技术
 abbrlink: 34049
 date: 2022-01-04 14:00:00
+description: 往数据库中插入记录时，如果发生唯一索引值冲突，insert on duplicate允许进行进一步的crud操作。
 ---
 
 # 前言
