@@ -1,11 +1,12 @@
 ---
-title: 踩坑日记之浅析Mockito mock Kotlin Object类方法报错
+title: 单元测试之浅析Mockito mock Kotlin Object类方法
 abbrlink: 48796
 date: 2021-09-12 23:38:56
 tags:
   - 技术
   - 踩坑
 categories: 技术
+description: Kotlin里有一种object类型的类，它在使用上跟Java里的静态类很相似。事实上，它们编译后确实很相似，只不过Kotlin在语法层面上隐藏了一些实现细节，这些细节如果不清楚的话往往会引发一些意料之外的错误...
 ---
 `Kotlin`里有一种`object`类型的类，它在使用上跟`Java`里的静态类很相似。事实上，它们编译后确实很相似，只不过`Kotlin`在语法层面上隐藏了一些实现细节，这些细节如果不清楚的话往往会引发一些意料之外的错误。
 `Mockito`是可以直接`mock`静态方法的，而`Mockito`在`mock`这种`Kotlin`类里定义的"静态方法"时却会直接报错，为什么呢？
