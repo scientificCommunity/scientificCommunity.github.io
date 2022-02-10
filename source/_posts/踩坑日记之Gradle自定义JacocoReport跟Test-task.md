@@ -3,6 +3,9 @@ title: 踩坑日记之Gradle自定义JacocoReport跟Test task
 abbrlink: 60737
 date: 2021-09-18 12:56:33
 tags:
+  - 技术
+  - 踩坑
+categories: 技术
 ---
 # 起因
 
