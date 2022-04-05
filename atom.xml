@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>穹柏</title>
+  <icon>https://www.krivers.space/icon.png</icon>
+  <subtitle>疏影横斜水清浅，暗香浮动月黄昏</subtitle>
+  <link href="https://www.krivers.space/atom.xml" rel="self"/>
+  
+  <link href="https://www.krivers.space/"/>
+  <updated>2021-12-27T15:56:47.074Z</updated>
+  <id>https://www.krivers.space/</id>
+  
+  <author>
+    <name>穹柏</name>
+    
+  </author>
+  
+  <generator uri="https://hexo.io/">Hexo</generator>
+  
+  <entry>
+    <title>杂谈之容器内访问宿主机docker命令</title>
+    <link href="https://www.krivers.space/2021/09/20/%E6%9D%82%E8%B0%88%E4%B9%8B%E5%AE%B9%E5%99%A8%E5%86%85%E8%AE%BF%E9%97%AE%E5%AE%BF%E4%B8%BB%E6%9C%BAdocker%E5%91%BD%E4%BB%A4/"/>
+    <id>https://www.krivers.space/2021/09/20/%E6%9D%82%E8%B0%88%E4%B9%8B%E5%AE%B9%E5%99%A8%E5%86%85%E8%AE%BF%E9%97%AE%E5%AE%BF%E4%B8%BB%E6%9C%BAdocker%E5%91%BD%E4%BB%A4/</id>
+    <published>2021-09-20T00:42:56.000Z</published>
+    <updated>2021-12-27T15:56:47.074Z</updated>
+    
+    
+    <summary type="html">&lt;h1 id=&quot;原理&quot;&gt;&lt;a href=&quot;#原理&quot; class=&quot;headerlink&quot; title=&quot;原理&quot;&gt;&lt;/a&gt;原理&lt;/h1&gt;&lt;p&gt;&lt;code&gt;docker&lt;/code&gt;在被安装时默认会在&lt;code&gt;/var/lib/docker.sock&lt;/code&gt;创建&lt;code&gt;unix domain socket&lt;/code&gt;。&lt;code&gt;docker daemon&lt;/code&gt;会通过它来监听&lt;a href=&quot;https://docs.docker.com/engine/api/&quot;&gt;Docker Engine API&lt;/a&gt; 请求。而&lt;code&gt;docker&lt;/code&gt;命令本质上是在&lt;code&gt;/bin/docker&lt;/code&gt;里包装了这些请求交互的细节(猜想，有研究过的朋友可以分享一下🤝)。所以我们只需要将这两个文件挂载到容器中即可。&lt;/p&gt;
+&lt;p&gt;&lt;em&gt;如果只挂载&lt;code&gt;/var/lib/docker.sock&lt;/code&gt;，我们查看容器列表(&lt;code&gt;docker ps&lt;/code&gt;)就需要这样操作：&lt;/em&gt;&lt;/p&gt;
+&lt;figure class=&quot;highlight shell&quot;&gt;&lt;table&gt;&lt;tr&gt;&lt;td class=&quot;gutter&quot;&gt;&lt;pre&gt;&lt;span class=&quot;line&quot;&gt;1&lt;/span&gt;&lt;br&gt;&lt;/pre&gt;&lt;/td&gt;&lt;td class=&quot;code&quot;&gt;&lt;pre&gt;&lt;span class=&quot;line&quot;&gt;curl -s --unix-socket /var/run/docker.sock http://dummy/containers/json&lt;/span&gt;&lt;br&gt;&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;/figure&gt;
+
+&lt;p&gt;&lt;strong&gt;总的来说：&lt;/strong&gt;&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;&lt;code&gt;/var/lib/docker.sock&lt;/code&gt;保证能跟&lt;code&gt;docker daemon&lt;/code&gt;通信&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;/bin/docker&lt;/code&gt;隐藏通信细节&lt;h1 id=&quot;具体操作&quot;&gt;&lt;a href=&quot;#具体操作&quot; class=&quot;headerlink&quot; title=&quot;具体操作&quot;&gt;&lt;/a&gt;具体操作&lt;/h1&gt;&lt;figure class=&quot;highlight shell&quot;&gt;&lt;table&gt;&lt;tr&gt;&lt;td class=&quot;gutter&quot;&gt;&lt;pre&gt;&lt;span class=&quot;line&quot;&gt;1&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;2&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;3&lt;/span&gt;&lt;br&gt;&lt;/pre&gt;&lt;/td&gt;&lt;td class=&quot;code&quot;&gt;&lt;pre&gt;&lt;span class=&quot;line&quot;&gt;docker run -d --name &amp;lt;yourContainerName&amp;gt;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;    -v /var/run/docker.sock:/var/run/docker.sock \&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;	-v /bin/docker:/bin/docker \&lt;/span&gt;&lt;br&gt;&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;/figure&gt;
+&lt;h1 id=&quot;注意点&quot;&gt;&lt;a href=&quot;#注意点&quot; class=&quot;headerlink&quot; title=&quot;注意点&quot;&gt;&lt;/a&gt;注意点&lt;/h1&gt;&lt;/li&gt;
+&lt;li&gt;如果&lt;code&gt;docker&lt;/code&gt;容器内需要访问宿主机&lt;code&gt;docker&lt;/code&gt;命令的用户不是&lt;code&gt;root&lt;/code&gt;用户或者不属于&lt;code&gt;docker&lt;/code&gt;组的用户，则还需执行： &lt;figure class=&quot;highlight shell&quot;&gt;&lt;table&gt;&lt;tr&gt;&lt;td class=&quot;gutter&quot;&gt;&lt;pre&gt;&lt;span class=&quot;line&quot;&gt;1&lt;/span&gt;&lt;br&gt;&lt;/pre&gt;&lt;/td&gt;&lt;td class=&quot;code&quot;&gt;&lt;pre&gt;&lt;span class=&quot;line&quot;&gt;sudo usermod -aG docker $USER&lt;/span&gt;&lt;br&gt;&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;/figure&gt;&lt;/li&gt;
+&lt;li&gt;如果容器基于&lt;code&gt;Alpine Linux&lt;/code&gt;，基于 &lt;code&gt;glibc&lt;/code&gt; 构建的&lt;code&gt;/bin/docker&lt;/code&gt;是无法执行的。所以还需要执行如下操作： &lt;figure class=&quot;highlight shell&quot;&gt;&lt;table&gt;&lt;tr&gt;&lt;td class=&quot;gutter&quot;&gt;&lt;pre&gt;&lt;span class=&quot;line&quot;&gt;1&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;2&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;3&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;4&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;5&lt;/span&gt;&lt;br&gt;&lt;/pre&gt;&lt;/td&gt;&lt;td class=&quot;code&quot;&gt;&lt;pre&gt;&lt;span class=&quot;line&quot;&gt;wget -q -O /etc/apk/keys/sgerrand.rsa.pub https://alpine-pkgs.sgerrand.com/sgerrand.rsa.pub&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;wget https://github.com/sgerrand/alpine-pkg-glibc/releases/download/2.34-r0/glibc-2.34-r0.apk&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;&lt;/span&gt;&lt;br&gt;&lt;span class=&quot;line&quot;&gt;apk add glibc-2.34-r0.apk&lt;/span&gt;&lt;br&gt;&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;/figure&gt;
+&lt;h1 id=&quot;参考&quot;&gt;&lt;a href=&quot;#参考&quot; class=&quot;headerlink&quot; title=&quot;参考&quot;&gt;&lt;/a&gt;参考&lt;/h1&gt;&lt;a href=&quot;https://blog.csdn.net/scientificCommunity/article/details/120386344&quot;&gt;杂谈之非root用户运行docker命令&lt;/a&gt;&lt;br&gt;&lt;a href=&quot;https://docs.docker.com/engine/reference/commandline/dockerd/#daemon-socket-option&quot;&gt;Daemon socket option&lt;/a&gt;&lt;br&gt;&lt;a href=&quot;https://github.com/sgerrand/alpine-pkg-glibc&quot;&gt;alpine-pkg-glibc&lt;/a&gt;&lt;/li&gt;
+&lt;/ol&gt;
+</summary>
+    
+    
+    
+    
+  </entry>
+  
+  <entry>
+    <title>杂谈之树莓派挂载硬盘</title>
+    <link href="https://www.krivers.space/2021/09/19/%E6%9D%82%E8%B0%88%E4%B9%8B%E6%A0%91%E8%8E%93%E6%B4%BE%E6%8C%82%E8%BD%BD%E7%A1%AC%E7%9B%98/"/>
+    <id>https://www.krivers.space/2021/09/19/%E6%9D%82%E8%B0%88%E4%B9%8B%E6%A0%91%E8%8E%93%E6%B4%BE%E6%8C%82%E8%BD%BD%E7%A1%AC%E7%9B%98/</id>
+    <published>2021-09-19T15:36:42.000Z</published>
+    <updated>2021-12-27T15:56:47.074Z</updated>
+    
+    
+    <summary type="html">&lt;h2 id=&quot;挂载步骤&quot;&gt;&lt;a href=&quot;#挂载步骤&quot; class=&quot;headerlink&quot; title=&quot;挂载步骤&quot;&gt;&lt;/a&gt;挂载步骤&lt;/h2&gt;&lt;ol&gt;
+&lt;li&gt;&lt;p&gt;&lt;code&gt;fdisk -l&lt;/code&gt; 找到新接入的硬盘，通常是&lt;code&gt;/dev/sda&lt;/code&gt;+一个序号(第一块硬盘则直接是&lt;code&gt;/dev/sda&lt;/code&gt;)&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;&lt;p&gt;&lt;code&gt;mkfs.ext4 /dev/sda&lt;/code&gt; 硬盘文件系统格式化为&lt;code&gt;ext4&lt;/code&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;&lt;p&gt;&lt;code&gt;sudo mount /dev/sda  /home/pi/xxx&lt;/code&gt;  将硬盘挂载到&lt;code&gt;/home/pi/xxx&lt;/code&gt;目录下。&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;&lt;p&gt;&lt;code&gt;df -h&lt;/code&gt;  即可看到新挂载的硬盘对应的目录信息&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;&lt;p&gt;配置开机自动挂载(如果不配置，系统重启后上述配置会失效)&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;&lt;p&gt;&lt;code&gt;vim /etc/fstab&lt;/code&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;&lt;p&gt;添加一行：&lt;/p&gt;
+ &lt;figure class=&quot;highlight bash&quot;&gt;&lt;table&gt;&lt;tr&gt;&lt;td class=&quot;gutter&quot;&gt;&lt;pre&gt;&lt;span class=&quot;line&quot;&gt;1&lt;/span&gt;&lt;br&gt;&lt;/pre&gt;&lt;/td&gt;&lt;td class=&quot;code&quot;&gt;&lt;pre&gt;&lt;span class=&quot;line&quot;&gt;/dev/sda  /home/pi/xxx      defaults  0 0&lt;/span&gt;&lt;br&gt;&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;/figure&gt;&lt;/li&gt;
+&lt;li&gt;&lt;p&gt;&lt;code&gt;reboot&lt;/code&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ol&gt;
+&lt;/li&gt;
+&lt;/ol&gt;
+</summary>
+    
+    
+    
+    
+    <category term="杂谈" scheme="https://www.krivers.space/tags/%E6%9D%82%E8%B0%88/"/>
+    
+  </entry>
+  
+  <entry>
+    <title>杂谈之非root用户运行docker命令</title>
+    <link href="https://www.krivers.space/2021/09/19/%E6%9D%82%E8%B0%88%E4%B9%8B%E9%9D%9Eroot%E7%94%A8%E6%88%B7%E8%BF%90%E8%A1%8Cdocker%E5%91%BD%E4%BB%A4/"/>
+    <id>https://www.krivers.space/2021/09/19/%E6%9D%82%E8%B0%88%E4%B9%8B%E9%9D%9Eroot%E7%94%A8%E6%88%B7%E8%BF%90%E8%A1%8Cdocker%E5%91%BD%E4%BB%A4/</id>
+    <published>2021-09-19T15:36:42.000Z</published>
+    <updated>2021-12-27T15:56:47.074Z</updated>
+    
+    
+    <summary type="html">&lt;h1 id=&quot;步骤&quot;&gt;&lt;a href=&quot;#步骤&quot; class=&quot;headerlink&quot; title=&quot;步骤&quot;&gt;&lt;/a&gt;步骤&lt;/h1&gt;&lt;h2 id=&quot;1-将用户添加至docker组中&quot;&gt;&lt;a href=&quot;#1-将用户添加至docker组中&quot; class=&quot;headerlink&quot; title=&quot;1. 将用户添加至docker组中&quot;&gt;&lt;/a&gt;1. 将用户添加至docker组中&lt;/h2&gt;&lt;figure class=&quot;highlight shell&quot;&gt;&lt;table&gt;&lt;tr&gt;&lt;td class=&quot;gutter&quot;&gt;&lt;pre&gt;&lt;span class=&quot;line&quot;&gt;1&lt;/span&gt;&lt;br&gt;&lt;/pre&gt;&lt;/td&gt;&lt;td class=&quot;code&quot;&gt;&lt;pre&gt;&lt;span class=&quot;line&quot;&gt;usermod -aG docker currUser&lt;/span&gt;&lt;br&gt;&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;/figure&gt;
+&lt;p&gt;&lt;code&gt;docker&lt;/code&gt;命令本质上是通过访问(读写)&lt;code&gt;/var/run/docker.sock&lt;/code&gt;来完成与&lt;code&gt;docker&lt;/code&gt;的交互。&lt;code&gt;/var/run/docker.sock&lt;/code&gt;默认属于&lt;code&gt;docker&lt;/code&gt;组以及&lt;code&gt;root&lt;/code&gt;用户，所以，要想获得&lt;code&gt;docker&lt;/code&gt;命令执行权，需要将用户添加到&lt;code&gt;docker&lt;/code&gt;组中。&lt;br&gt;ps: 如果docker组不存在，则需先执行：&lt;code&gt;sudo groupadd docker&lt;/code&gt;&lt;/p&gt;
+&lt;h2 id=&quot;2-切换到docker组&quot;&gt;&lt;a href=&quot;#2-切换到docker组&quot; class=&quot;headerlink&quot; title=&quot;2. 切换到docker组&quot;&gt;&lt;/a&gt;2. 切换到docker组&lt;/h2&gt;&lt;figure class=&quot;highlight shell&quot;&gt;&lt;table&gt;&lt;tr&gt;&lt;td class=&quot;gutter&quot;&gt;&lt;pre&gt;&lt;span class=&quot;line&quot;&gt;1&lt;/span&gt;&lt;br&gt;&lt;/pre&gt;&lt;/td&gt;&lt;td class=&quot;code&quot;&gt;&lt;pre&gt;&lt;span class=&quot;line&quot;&gt;newgrp docker&lt;/span&gt;&lt;br&gt;&lt;/pre&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;/figure&gt;
+&lt;h1 id=&quot;参考&quot;&gt;&lt;a href=&quot;#参考&quot; class=&quot;headerlink&quot; title=&quot;参考&quot;&gt;&lt;/a&gt;参考&lt;/h1&gt;&lt;p&gt;&lt;a href=&quot;https://docs.docker.com/engine/reference/commandline/dockerd/#daemon-socket-option&quot;&gt;daemon-socket-option&lt;/a&gt;&lt;/p&gt;
+</summary>
+    
+    
+    
+    <category term="技术" scheme="https://www.krivers.space/categories/%E6%8A%80%E6%9C%AF/"/>
+    
+    
+    <category term="技术" scheme="https://www.krivers.space/tags/%E6%8A%80%E6%9C%AF/"/>
+    
+  </entry>
+  
+</feed>
