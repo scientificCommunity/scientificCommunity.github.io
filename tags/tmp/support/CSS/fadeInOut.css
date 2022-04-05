@@ -1,0 +1,16 @@
+.bg {
+    position: absolute;
+    left: 0;
+    top: 0;
+    -webkit-transition: opacity 2s linear;
+    -moz-transition: opacity 2s linear;
+    -o-transition: opacity 2s linear;
+    transition: opacity 3s linear;
+    opacity: 0;
+}
+
+.fadein {
+    opacity: 100;
+    filter: alpha(opacity=100);
+}
+

@@ -1,0 +1,50 @@
+<style>
+    body {
+        width: 100%;
+        height: 100%;
+        overflow: hidden
+    }
+
+    *{
+        margin-left: 0;
+        padding: 0;
+    }
+    video {
+        /*position: fixed;*/
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        /*min-width: 100%;*/
+        /*min-height: 100%;*/
+        /*设置百分比的值会导致按f12时视频会等比例缩小*/
+        /*height: 105%;*/
+        /*width: 103%;*/
+        /*加滤镜*/
+        /*filter: blur(15px); //背景模糊设置*/
+        /*-webkit-filter: grayscale(100%);*/
+        /*filter:grayscale(100%); //背景灰度设置*/
+        z-index: -11
+    }
+
+    source {
+        min-width: 100%;
+        min-height: 100%;
+        height: auto;
+        width: auto;
+    }
+    #roseVideo {
+        margin-top: -10px;
+        margin-left: -0px;
+        overflow: hidden;
+
+    }
+</style>
+<video id="roseVideo" autoplay loop muted>
+    <source src="../support/video/video.mp4" type="video/mp4"/>
+</video>
+<script>
+    const videoContainerEntries = document.getElementById("roseVideo");
+    videoContainerEntries.height = window.innerHeight+17 + ""
+    videoContainerEntries.width = window.innerWidth + ""
+</script>

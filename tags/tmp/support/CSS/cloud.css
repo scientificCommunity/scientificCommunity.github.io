@@ -1,0 +1,165 @@
+* {
+    margin: auto;
+    padding: 0;
+}
+/*禁止页面滚动*/
+body { overflow: hidden }
+
+ul {
+    /*禁止ul向左移动*/
+    overflow: hidden;
+    width: 100%;
+    height: 900px;
+    background-color: skyblue;
+    animation: day 10s linear 0s infinite alternate;
+
+    position: relative;
+    margin-top: 0;
+    z-index: 20;
+}
+
+ul li {
+
+    list-style: none;
+    height: 100%;
+    width: 400%;
+    position: absolute;
+    top: 0;
+    left: 0;
+}
+
+#clouds li:nth-child(1) {
+    background-image: url("../images/12.png");
+    animation: cloud1 50s linear 0s infinite;
+}
+
+#clouds li:nth-child(2) {
+    margin-left: 100px;
+    background-image: url("../images/27_2.png");
+    animation: cloud2 50s linear 0s infinite;
+}
+
+#clouds li:nth-child(3) {
+    position: absolute;
+    left: 500px;;
+    background-image: url("../images/09_1.png");
+    animation: cloud3 50s linear 0s infinite;
+}
+
+#clouds li:nth-child(4) {;
+    background-image: url("../images/09_2.png");
+    animation: cloud3 50s linear 0s infinite;
+}
+
+#clouds li:nth-child(5) {;
+    background-image: url("../images/11.png");
+    animation: cloud3 50s linear 0s infinite;
+}
+
+table {
+    position: absolute;
+    top: 100px;
+    left: 100px;
+    opacity: 1;
+    z-index: 1;
+
+}
+
+#logn {
+    position: absolute;
+    top: 20%;
+    left: 60%;
+    width: 500px;
+    height: 300px;
+    background-image: url("../images/a.jpg");
+    background-size: 500px;
+}
+
+tr td {
+    color: white;
+    height: 50px;
+}
+
+.txt {
+    position: relative;
+    top: 0;
+    left: 0;
+    width: 250px;
+    height: 30px;
+}
+
+#sbmt {
+    position: relative;
+    left: 181px;
+    height: 40px;
+    width: 70px;;
+}
+
+.shakeNo {
+    animation: shakeInfo 0.2s linear 0s 5;
+    position: relative;
+    left: 0;
+}
+
+@keyframes day {
+    0% {
+        background-color: skyblue;
+    }
+    100% {
+        background-color: black;
+    }
+}
+
+@keyframes cloud1 {
+    from {
+        margin-left: 0;
+    }
+    to {
+        margin-left: -100%;;
+    }
+}
+
+@keyframes cloud2 {
+    from {
+        margin-left: 0;
+    }
+    to {
+        margin-left: -150%;;
+    }
+}
+
+@keyframes cloud3 {
+    from {
+        margin-left: 0;
+    }
+    to {
+        margin-left: -200%;;
+    }
+}
+
+@keyframes cloud4 {
+    from {
+        margin-left: 0;
+    }
+    to {
+        margin-left: -250%;;
+    }
+}
+
+@keyframes cloud5 {
+    from {
+        margin-left: 0;
+    }
+    to {
+        margin-left: -300%;;
+    }
+}
+
+@keyframes shakeInfo {
+    50% {
+        left: 7px;
+    }
+    100% {
+        left: -7px;
+    }
+}
