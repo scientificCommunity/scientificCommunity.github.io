@@ -38,7 +38,7 @@
   </url>
   
   <url>
-    <loc>https://www.krivers.fun/categories/index.html</loc>
+    <loc>https://www.krivers.fun/tags/index-empty.html</loc>
     
     <lastmod>2023-11-28</lastmod>
     
@@ -56,6 +56,15 @@
   </url>
   
   <url>
+    <loc>https://www.krivers.fun/tags/index.html</loc>
+    
+    <lastmod>2023-11-28</lastmod>
+    
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  
+  <url>
     <loc>https://www.krivers.fun/about/index.html</loc>
     
     <lastmod>2023-11-28</lastmod>
@@ -65,16 +74,7 @@
   </url>
   
   <url>
-    <loc>https://www.krivers.fun/tags/index-empty.html</loc>
-    
-    <lastmod>2023-11-28</lastmod>
-    
-    <changefreq>monthly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  
-  <url>
-    <loc>https://www.krivers.fun/tags/index.html</loc>
+    <loc>https://www.krivers.fun/categories/index.html</loc>
     
     <lastmod>2023-11-28</lastmod>
     
@@ -101,34 +101,7 @@
   </url>
   
   <url>
-    <loc>https://www.krivers.fun/posts/992afad8/</loc>
-    
-    <lastmod>2023-11-28</lastmod>
-    
-    <changefreq>monthly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  
-  <url>
-    <loc>https://www.krivers.fun/posts/655061ae/</loc>
-    
-    <lastmod>2023-11-28</lastmod>
-    
-    <changefreq>monthly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  
-  <url>
     <loc>https://www.krivers.fun/posts/6a250a7b/</loc>
-    
-    <lastmod>2023-11-28</lastmod>
-    
-    <changefreq>monthly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  
-  <url>
-    <loc>https://www.krivers.fun/posts/b310611e/</loc>
     
     <lastmod>2023-11-28</lastmod>
     
@@ -146,6 +119,15 @@
   </url>
   
   <url>
+    <loc>https://www.krivers.fun/posts/4fc0a6f7/</loc>
+    
+    <lastmod>2023-11-28</lastmod>
+    
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  
+  <url>
     <loc>https://www.krivers.fun/posts/a1887a80/</loc>
     
     <lastmod>2023-11-28</lastmod>
@@ -155,7 +137,25 @@
   </url>
   
   <url>
-    <loc>https://www.krivers.fun/posts/4fc0a6f7/</loc>
+    <loc>https://www.krivers.fun/posts/b310611e/</loc>
+    
+    <lastmod>2023-11-28</lastmod>
+    
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  
+  <url>
+    <loc>https://www.krivers.fun/posts/992afad8/</loc>
+    
+    <lastmod>2023-11-28</lastmod>
+    
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  
+  <url>
+    <loc>https://www.krivers.fun/posts/655061ae/</loc>
     
     <lastmod>2023-11-28</lastmod>
     
@@ -322,14 +322,14 @@
   </url>
   
   <url>
-    <loc>https://www.krivers.fun/tags/unit-test/</loc>
+    <loc>https://www.krivers.fun/tags/vertx/</loc>
     <lastmod>2023-11-28</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.2</priority>
   </url>
   
   <url>
-    <loc>https://www.krivers.fun/tags/vertx/</loc>
+    <loc>https://www.krivers.fun/tags/unit-test/</loc>
     <lastmod>2023-11-28</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.2</priority>
