@@ -98,6 +98,54 @@
       </tags>
   </entry>
   <entry>
+    <title>Mysql之浅析AUTO_INCREMENT</title>
+    <url>/posts/34050/</url>
+    <content><![CDATA[<p><code>AUTO_INCREMENT</code>用于为表中的列设置一个自增序列，在非集群模式下，用它来为主键列自动生成值是一件很方便的事。并且，Mysql提供了一系列的锁机制来保证它的性能跟可靠性，通过这些锁机制，我们可以让它变得很高效。</p>
+<h2 id="术语"><a href="#术语" class="headerlink" title="术语"></a>术语</h2><p>先来了解后面将要用到的术语。</p>
+<ul>
+<li>Simple inserts  能预先知道插入行数的语句。比如说单行插入（不包括<a href="https://dev.mysql.com/doc/refman/8.0/en/insert-on-duplicate.html">INSERT … ON DUPLICATE KEY UPDATE</a>），不带子句的多行插入（自增列不赋值或全赋值）。</li>
+<li>Bulk inserts  不能能预先知道插入行数的语句。比如<a href="https://dev.mysql.com/doc/refman/8.0/en/insert-select.html">INSERT … SELECT</a>, <a href="https://dev.mysql.com/doc/refman/8.0/en/replace.html">REPLACE … SELECT</a> 。这种模式下，<code>InnoDB</code> 会在处理时为每一行的自增列一次分配一个自增值</li>
+<li>Mixed-mode inserts  <figure class="highlight sql"><table><tr><td class="code"><pre><span class="line"><span class="keyword">INSERT</span> <span class="keyword">INTO</span> t1 (c1,c2) <span class="keyword">VALUES</span> (<span class="number">1</span>,<span class="string">&#x27;a&#x27;</span>), (<span class="keyword">NULL</span>,<span class="string">&#x27;b&#x27;</span>), (<span class="number">5</span>,<span class="string">&#x27;c&#x27;</span>), (<span class="keyword">NULL</span>,<span class="string">&#x27;d&#x27;</span>);</span><br></pre></td></tr></table></figure>
+  <a href="https://dev.mysql.com/doc/refman/8.0/en/insert-on-duplicate.html">INSERT … ON DUPLICATE KEY UPDATE</a></li>
+<li>Insert-like  以上所有插入语句的统称</li>
+</ul>
+<h2 id="锁模式"><a href="#锁模式" class="headerlink" title="锁模式"></a>锁模式</h2><p>锁模式在启动时通过<code>innodb_autoinc_lock_mode</code>这个变量来配置，它有3个值：<code>0, 1, 2</code>。分别对应<code>traditional</code>(传统)、<code>consecutive</code>(连续)、<code>interleaved</code>(交错)3种模式。</p>
+<p>在<code>Mysql5.6~5.7</code>里，这个配置项的默认值是<code>1</code>，从<code>Mysql8</code>开始，它的默认值<code>2</code>。这个一方面是因为模式<code>2</code>的性能更好，另一方面是因为从<code>Mysql8</code>开始，默认的主从复制的方式由<code>statement-based</code> 改为了<code>row based</code>。<code>row based</code> 能保证<code>innodb_autoinc_lock_mode=2</code>时主从复制时的数据不会出现不一致的问题。好了，下面开始详细了解这三种锁模式吧！</p>
+<ul>
+<li>traditional  在这种模式下，Mysql所有的<code>Insert-like</code>操作都会设置一个表级别的<code>AUTO-INC</code> 锁，这个锁会在单条语句执行完毕时释放。  也就是说，如果有多个事务同时对同一张表执行<code>Insert-like</code> 操作，那么，即使它们没有操作同一条记录，也会串行执行。所以，它的性能相对另外两种模式来说会比较糟糕。</li>
+<li>consecutive  在这种模式下，对于<code>Simple inserts</code>语句，<code>Mysql</code>会在语句执行的初始阶段将一条语句需要的所有自增值会一次性分配出来，并且通过设置一个互斥量来保证自增序列的一致性，一旦自增值生成完毕，这个互斥量会立即释放，不需要等到语句执行结束。  所以，在<code>consecutive</code>模式，多事务并发执行<code>Simple inserts</code>这类语句时， 相对traditional模式，性能会有比较大的提升。  由于一开始就为语句分配了所有需要的自增值，那么对于像<code>Mixed-mode inserts</code>这类语句，就有可能多分配了一些值给它，从而导致自增序列出现”<strong>空隙</strong>“。而<code>traditional</code>模式因为每一次只会为一条记录分配自增值，所有不会有这种问题。  另外，对于<code>Bulk inserts</code>语句，依然会采取<code>AUTO-INC</code>锁。所以，如果有一条<code>Bulk inserts</code>语句正在执行的话，<code>Simple inserts</code>也必须等到该语句执行完毕才能继续执行。</li>
+<li>interleaved  在这种模式下，对于所有的<code>Insert-like</code>语句，都不会存在表级别的<code>AUTO-INC</code>锁，意味着同一张表上的多个语句并发时阻塞会大幅减少。  但是，这种模式必须运行在<code>row based</code>或者<code>mixed-format</code>(其实说白了也是row based，只不过mysql会根据自增模式为不安全的语句自动选择row based模式)复制模式下。因为<code>interleaved</code>这种模式下对于相同顺序的语句每次执行行都会产生不同的结果(谁竞争到<strong>互斥量</strong>，谁就能获得生成自增值的权利)，所以，如果复制模式是<code>statement-based</code>或者通过<code>binlog</code>进行数据恢复时(牵扯到binlog的语句重放)，可能会导致数据不一致。</li>
+</ul>
+<h2 id="注意点"><a href="#注意点" class="headerlink" title="注意点"></a>注意点</h2><ul>
+<li>自增值的生成后是不能回滚的，所以自增值生成后，事务回滚了，那么那些已经生成的自增值就丢失了，从而使自增列的数据出现空隙</li>
+<li>正常情况下，自增列是不存在<code>0</code>这个值的。所以，如果插入语句中对自增列设置的值为<code>0</code>或者<code>null</code>，就会自动应用自增序列。  那么，如果想在自增列中插入为0这个值，怎么办呢？可以通过将<a href="https://dev.mysql.com/doc/refman/8.0/en/sql-mode.html#sqlmode_no_auto_value_on_zero">SQL Mode</a>设置为<code>NO_AUTO_VALUE_ON_ZERO</code>即可</li>
+<li>在Mysql5.7以及更早之前，自增序列的计数器(<code>auto-increment counter</code>)是保存在内存中的。<code>auto-increment counter</code>在每次Mysql重新启动后通过类似下面的这种语句进行初始化：  <figure class="highlight sql"><table><tr><td class="code"><pre><span class="line"><span class="keyword">SELECT</span> <span class="built_in">MAX</span>(AUTO_INC_COLUMN) <span class="keyword">FROM</span> table_name <span class="keyword">FOR</span> UPDATE</span><br></pre></td></tr></table></figure>
+  而从<code>Mysql8</code>开始，<code>auto-increment counter</code>被存储在了<code>redo log</code>中，并且每次变化都会刷新到<code>redo log</code>中。另外，我们可以通过<a href="https://dev.mysql.com/doc/refman/8.0/en/alter-table.html">ALTER TABLE … AUTO_INCREMENT = N</a> 来主动修改<br>  <code>auto-increment counter</code>。</li>
+</ul>
+<h2 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h2><ol>
+<li>单实例下，可以设置<code>innodb_autoinc_lock_mode=2</code></li>
+<li>主从<ol>
+<li>复制模式为<code>statement-based</code>，设置<code>innodb_autoinc_lock_mode=1</code></li>
+<li>复制模式为<code>row based</code>或者<code>mixed-format</code>，设置<code>innodb_autoinc_lock_mode=2</code></li>
+</ol>
+</li>
+</ol>
+<h2 id="参考链接"><a href="#参考链接" class="headerlink" title="参考链接"></a>参考链接</h2><ul>
+<li><strong><strong><a href="https://dev.mysql.com/doc/refman/8.0/en/innodb-auto-increment-handling.html#innodb-auto-increment-lock-mode-usage-implications">15.6.1.6 AUTO_INCREMENT Handling in InnoDB</a></strong></strong></li>
+<li><strong><a href="https://dev.mysql.com/doc/refman/8.0/en/innodb-recovery.html">15.18.2 InnoDB Recovery</a></strong></li>
+<li><strong><strong><a href="https://dev.mysql.com/doc/refman/8.0/en/replication-features-auto-increment.html">17.5.1.1 Replication and AUTO_INCREMENT</a></strong></strong></li>
+<li><strong><a href="https://dev.mysql.com/doc/refman/8.0/en/example-auto-increment.html">3.6.9 Using AUTO_INCREMENT</a></strong></li>
+</ul>
+]]></content>
+      <categories>
+        <category>技术</category>
+      </categories>
+      <tags>
+        <tag>技术</tag>
+        <tag>Mysql</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>Mysql之浅析INSERT ON DUPLICATE</title>
     <url>/posts/34049/</url>
     <content><![CDATA[<h1 id="前言"><a href="#前言" class="headerlink" title="前言"></a>前言</h1><p>如果不特别指出，默认mysql版本为8.0</p>
@@ -242,6 +290,93 @@
       </tags>
   </entry>
   <entry>
+    <title>k8s</title>
+    <url>/posts/655061ae/</url>
+    <content><![CDATA[]]></content>
+  </entry>
+  <entry>
+    <title>Vertx实战之如何追踪异步函数调用</title>
+    <url>/posts/6a250a7b/</url>
+    <content><![CDATA[<h1 id="背景"><a href="#背景" class="headerlink" title="背景"></a>背景</h1><p>日常开发中我们经常需要处理各种系统问题，而这些系统问题通常由一些非预期的因素引起（比如非预期的输入，内存不够，网络波动等）。此时就需要知道</p>
+<ol>
+<li>本次系统问题影响了谁？</li>
+<li>如果本次系统问题是因为非预期的输入而导致的，那么这个非预期的输入是什么？</li>
+</ol>
+<p>上述两点在同步编程里可以通过全局try-catch来实现。但在异步编程里该怎么办呢？</p>
+<hr>
+<h1 id="思路"><a href="#思路" class="headerlink" title="思路"></a>思路</h1><p>我的想法是绑定一个唯一id到一次完整的请求调用中（这个完整取决于我们想要监控的范围），无论程序执行到何处，我们总能拿到与请求一一对应的<code>调用上下文</code>的id。</p>
+<p>  我将分两种场景进行讨论。一种是同步或基于jut下的线程池类进行异步调用的应用程序（如基于spring5之前的应用程序）。另外一种基于vertx（底层基于netty）的应用程序。</p>
+<hr>
+<h2 id="技术栈"><a href="#技术栈" class="headerlink" title="技术栈"></a>技术栈</h2><p><code>vert.x 4</code>、<code>netty 4</code>、<a href="https://github.com/alibaba/transmittable-thread-local"><code>alibaba TransmittableThreadLocal</code></a>、<code>jboss javassist</code>、hotspot类加载&amp;方法调用</p>
+<hr>
+<h2 id="1-同步or基于jdk的异步"><a href="#1-同步or基于jdk的异步" class="headerlink" title="1. 同步or基于jdk的异步"></a>1. 同步or基于jdk的异步</h2><p><strong>关于这种场景，有以下几种实现：</strong></p>
+<ol>
+<li><p><strong>程序中的函数调用是完全同步的</strong></p>
+<p> 则可通过<code>java.lang.ThreadLocal</code>绑定一个唯一id到当前线程。入口处生成，出口处销毁。<br> 如果我们用的是logback，也可通过 <code>org.slf4j.MDC</code> 来实现这个功能。其内部也是基于ThreadLocal。</p>
+</li>
+<li><p><strong>程序中函数调用是异步的，异步通过新建<code>java.lang.Thread</code> 的方式实现。</strong></p>
+<p> 这里可通过<code>java.lang.InheritableThreadLocal</code> 绑定一个唯一id到当前线程。<code>Thread</code>的构造函数里会自动把通过<code>InheritableThreadLocal</code> 绑定到当前线程的数据拷贝到这个正在创建的<code>Thread</code> 里。所以，只要这个<code>Thread</code> 是在我们<strong>需要监控的区域（当前线程通过</strong><code>InheritableThreadLocal</code><strong>绑定了id后）</strong>创建的，就能实现这个唯一id的跨线程传递。</p>
+</li>
+<li><p><strong>程序中函数调用是异步的，异步通过<code>java.util.concurrent</code> 下的线程池类实现。</strong></p>
+<p> 由于线程池中的线程是可以复用的，所以，如果我们往线程池中丢任务时，有两种情况：</p>
+<ol>
+<li>线程池创建新的线程来执行该任务（比如线程池中的线程数&lt;coreSize）。这种情况下<code>InheritableThreadLocal</code> 依然是有效的。</li>
+<li>线程池把任务分配给了已有线程（比如线程池中的线程数≥coreSize并且待执行任务队列没有填满）。这种情况下<code>InheritableThreadLocal</code> 是无法生效的（线程池中的存活线程会循环拉取等待任务队列中的task去执行，而这个过程是没有<code>InheritableThreadLocal</code> 拷贝的）。所以，这里可以用阿里的<code>[TransmittableThreadLocal](https://github.com/alibaba/transmittable-thread-local)</code> 组件来实现这个唯一id在线程池中的传递（其核心原理是在<code>Runnable</code> 中用一个变量来存储当前线程的ThreadLocal值，当线程执行此Runnable时再拿出来）。</li>
+</ol>
+</li>
+</ol>
+<hr>
+<h3 id="实现思路总结"><a href="#实现思路总结" class="headerlink" title="实现思路总结"></a>实现思路总结</h3><p>  异步环境下的关键在于如何跨线程传递ThreadLocal的值</p>
+<hr>
+<h2 id="2-Vertx-中的实现"><a href="#2-Vertx-中的实现" class="headerlink" title="2. Vertx 中的实现"></a>2. Vertx 中的实现</h2><p>  <code>vertx</code>是一个类似于<code>spring</code>系列的用于构建分布式微服务的框架。基于<code>vertx</code>构建的应用程序最大的特点是<strong>无阻塞</strong>&amp;<strong>全异步。</strong></p>
+<p>  vertx里的异步主要分两种。一种是在eventbus上传递消息的异步。另一种是基于netty的io操作异步</p>
+<h3 id="1-eventbus上异步传递消息"><a href="#1-eventbus上异步传递消息" class="headerlink" title="1. eventbus上异步传递消息"></a>1. eventbus上异步传递消息</h3><p>   先来看一个简单的示例程序</p>
+<figure class="highlight java"><table><tr><td class="code"><pre><span class="line"><span class="keyword">static</span> <span class="keyword">final</span> String ADDRESS_1 = <span class="string">&quot;address1&quot;</span>;</span><br><span class="line"> <span class="keyword">static</span> <span class="keyword">final</span> String MESSAGE_1 = <span class="string">&quot;message1&quot;</span>;</span><br><span class="line"> <span class="keyword">static</span> <span class="keyword">final</span> String REPLY_MESSAGE_1 = <span class="string">&quot;replyMessage1&quot;</span>;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">void</span> <span class="title">sendMsgByEventbus</span><span class="params">()</span> </span>&#123;</span><br><span class="line">       <span class="comment">//初始化一个具有默认设置的vertx实例</span></span><br><span class="line">       Vertx vertx = Vertx.vertx();</span><br><span class="line"></span><br><span class="line">       <span class="comment">//注册一个handler/consumer到eventbus</span></span><br><span class="line">       vertx.eventBus().consumer(ADDRESS_1, event -&gt; &#123;</span><br><span class="line">           log.info(<span class="string">&quot;receive msg:&#123;&#125;&quot;</span>, event.body());</span><br><span class="line">           event.reply(REPLY_MESSAGE_1);</span><br><span class="line">       &#125;);</span><br><span class="line"></span><br><span class="line">       <span class="comment">//通过eventbus发送消息给刚注册的handler</span></span><br><span class="line">       vertx.eventBus().request(ADDRESS_1, MESSAGE_1, reply -&gt; &#123;</span><br><span class="line">           log.info(<span class="string">&quot;receive replied msg:&#123;&#125;&quot;</span>, reply.result().body());</span><br><span class="line">       &#125;);</span><br><span class="line">   &#125;</span><br></pre></td></tr></table></figure>
+
+<p>下面是程序执行的结果</p>
+<figure class="highlight java"><table><tr><td class="code"><pre><span class="line">[vert.x-eventloop-thread-<span class="number">0</span>] - receive msg:message1</span><br><span class="line">[vert.x-eventloop-thread-<span class="number">0</span>] - receive replied msg:replyMessage1</span><br></pre></td></tr></table></figure>
+
+<p>可以看到发起调用的是主线程，处理调用跟处理回调的是线程<code>vert.x-eventloop-thread-0</code>。</p>
+<p>那么，这个异步是如何实现的呢？显然，异步最明显的体现就是最后发送消息这里。所以我们就从<code>Eventbus#request</code> 逐步深入。</p>
+<p><strong>大概流程是这样的：</strong></p>
+<ol>
+<li>从<code>eventbus</code>中根据我们传入的<code>address</code>拿到所有注册到这个地址上的handler。</li>
+<li>将对应<code>handler</code>对传入消息的处理包装成一个<code>runnable</code>丢进一个<code>queue</code></li>
+<li><code>eventLoop Thread</code>从这个<code>queue</code>中抓取<code>task</code>执行</li>
+</ol>
+<p><strong>关键代码片段如下：</strong></p>
+<figure class="highlight java"><table><tr><td class="code"><pre><span class="line"><span class="comment">//与本主题无关的只展示调用链路供大家参考</span></span><br><span class="line"><span class="comment">//Eventbus#request</span></span><br><span class="line"><span class="comment">//  EventbusImpl#request</span></span><br><span class="line"><span class="comment">//    EventbusImpl#sendOrPubInternal</span></span><br><span class="line"><span class="comment">//      EventbusImpl#sendOrPubInternal</span></span><br><span class="line"><span class="comment">//        EventbusImpl#OutboundDeliveryContext</span></span><br><span class="line"><span class="comment">//          EventbusImpl#sendOrPub</span></span><br><span class="line"><span class="comment">//            EventbusImpl#sendLocally</span></span><br><span class="line"><span class="comment">//              EventbusImpl#deliverMessageLocally</span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">protected</span> ReplyException <span class="title">deliverMessageLocally</span><span class="params">(MessageImpl msg)</span> </span>&#123;</span><br><span class="line">	  <span class="comment">//1.找出跟msg.address()的handlerHolder</span></span><br><span class="line">	  ConcurrentCyclicSequence&lt;HandlerHolder&gt; handlers = handlerMap.get(msg.address());</span><br><span class="line">	  <span class="keyword">if</span> (handlers != <span class="keyword">null</span>) &#123;</span><br><span class="line">	    <span class="keyword">for</span> (HandlerHolder holder: handlers) &#123;</span><br><span class="line">		  <span class="comment">//2.依次调用这些handler的receive方法</span></span><br><span class="line">	      holder.handler.receive(msg.copyBeforeReceive());</span><br><span class="line">	    &#125;</span><br><span class="line">	    <span class="keyword">return</span> <span class="keyword">null</span>;</span><br><span class="line">	  &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">receive</span><span class="params">(MessageImpl msg)</span> </span>&#123;</span><br><span class="line">	  <span class="comment">//3.匿名异步任务进队列</span></span><br><span class="line">	  context.nettyEventLoop().execute(() -&gt; &#123;</span><br><span class="line">	     doReceive(msg);</span><br><span class="line">	  &#125;);</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">//SingleThreadEventExecutor#execute</span></span><br><span class="line"><span class="function"><span class="keyword">private</span> <span class="keyword">void</span> <span class="title">execute</span><span class="params">(Runnable task, <span class="keyword">boolean</span> immediate)</span> </span>&#123;</span><br><span class="line">	<span class="comment">//比较当前线程是否是eventLoop线程，是则返回true</span></span><br><span class="line">	<span class="comment">//由于我们在main里调用的eventbus#request,所以这里是false</span></span><br><span class="line">    <span class="keyword">boolean</span> inEventLoop = inEventLoop();</span><br><span class="line"></span><br><span class="line">	<span class="comment">//4. 添加到queue中，后面执行任务的线程会调用该queue的poll方法</span></span><br><span class="line">    addTask(task);</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (!inEventLoop) &#123;</span><br><span class="line">		<span class="comment">//如果当前eventLoop对象的thread为空则创建一个Thread绑定到当前eventLoop</span></span><br><span class="line">        startThread();</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">//eventLoop中运行的thread通过这个方法从上面说的queue中拿task执行</span></span><br><span class="line"><span class="comment">//外层会循环执行该runAllTasks，直到Eventloop#shutdownGracefully被执行</span></span><br><span class="line"><span class="comment">//参考NioEventLoop#run</span></span><br><span class="line"><span class="function"><span class="keyword">protected</span> <span class="keyword">boolean</span> <span class="title">runAllTasks</span><span class="params">(<span class="keyword">long</span> timeoutNanos)</span> </span>&#123;</span><br><span class="line">      Runnable task = pollTask();</span><br><span class="line">      </span><br><span class="line">      <span class="keyword">for</span> (;;) &#123;</span><br><span class="line">		  <span class="comment">//5.执行task</span></span><br><span class="line">          safeExecute(task);</span><br><span class="line"></span><br><span class="line">          runTasks ++;</span><br><span class="line">					</span><br><span class="line">		  <span class="comment">//如果队列中还有task，则继续执行</span></span><br><span class="line">          task = pollTask();</span><br><span class="line">          <span class="keyword">if</span> (task == <span class="keyword">null</span>) &#123;</span><br><span class="line">              lastExecutionTime = ScheduledFutureTask.nanoTime();</span><br><span class="line">              <span class="keyword">break</span>;</span><br><span class="line">          &#125;</span><br><span class="line">      &#125;</span><br><span class="line">      <span class="keyword">return</span> <span class="keyword">true</span>;</span><br><span class="line">  &#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">protected</span> <span class="keyword">static</span> Runnable <span class="title">pollTaskFrom</span><span class="params">(Queue&lt;Runnable&gt; taskQueue)</span> </span>&#123;</span><br><span class="line">    <span class="keyword">for</span> (;;) &#123;</span><br><span class="line">        Runnable task = taskQueue.poll();</span><br><span class="line">        <span class="keyword">if</span> (task != WAKEUP_TASK) &#123;</span><br><span class="line">            <span class="keyword">return</span> task;</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">//safeExecute会去执行第3步中的匿名任务</span></span><br><span class="line"><span class="function"><span class="keyword">protected</span> <span class="keyword">boolean</span> <span class="title">doReceive</span><span class="params">(Message&lt;T&gt; message)</span> </span>&#123;</span><br><span class="line">		Handler&lt;Message&lt;T&gt;&gt; theHandler = handler;</span><br><span class="line">		</span><br><span class="line">		deliver(theHandler, message);</span><br><span class="line">		<span class="keyword">return</span> <span class="keyword">true</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">//MessageConsumerImpl#deliver</span></span><br><span class="line"><span class="comment">//  MessageConsumerImpl#dispatch</span></span><br><span class="line"><span class="comment">//    AbstractContext#dispatch</span></span><br><span class="line"><span class="comment">//      InboundDeliveryContext#dispatch   ++ 上一步的匿名Runnable会调用 </span></span><br><span class="line"><span class="comment">//        InboundDeliveryContext#next</span></span><br><span class="line"><span class="comment">//          MessageConsumerImpl#dispatch</span></span><br><span class="line"><span class="comment">//            DuplicatedContext#emit</span></span><br><span class="line"><span class="comment">//              EventLoopContext#emit</span></span><br><span class="line">&lt;T&gt; <span class="function"><span class="keyword">void</span> <span class="title">emit</span><span class="params">(AbstractContext ctx, T argument, Handler&lt;T&gt; task)</span> </span>&#123;</span><br><span class="line">    <span class="keyword">try</span> &#123;</span><br><span class="line">	  <span class="comment">//6.执行handler/task中的事件处理</span></span><br><span class="line">	  <span class="comment">//这个task就是我们之前通过Eventbus#consumer注册进来的</span></span><br><span class="line">      task.handle(argument);</span><br><span class="line">    &#125; <span class="keyword">catch</span> (Throwable t) &#123;</span><br><span class="line">      reportException(t);</span><br><span class="line">    &#125; <span class="keyword">finally</span> &#123;</span><br><span class="line">      ctx.endDispatch(prev);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>我删减了一些不重要的部分，以便更易于理解。</p>
+<p>通过上面的代码片段我们可以发现，第3步的<code>SingleThreadEventExecutor#execute</code>往队列里push任务似乎是解决问题（跨线程传递唯一id）的关键。所以，如果我们能够<strong>在这个task进入<code>queue</code>之前往这个task中塞上当前线程的<code>ThreadLocal</code>值，待到这个<code>task</code>的<code>run</code>方法被执行时再把这个<code>ThreadLocal</code>值拿出来塞到当前线程（执行这个<code>task</code>的线程）的<code>ThreadLocal</code>中</strong>，问题就解决了。</p>
+<p>显然，我们需要修改这些类的代码。那么，怎么实现这个功能呢？</p>
+<p><code>java.lang.instrument</code> 提供了一系列运行时替换class字节码的技术。而<a href="https://github.com/jboss-javassist/javassist">jboss Javaassist</a> 则提供了一些列修改字节码的接口。所以我们只需要结合这两项技术再通过javaagent指令即可达成我们的目的。</p>
+<p>修改字节码的实现可参考<a href="https://github.com/scientificCommunity/blog-sample/blob/main/vertx4-transformer/src/main/java/org/baichuan/example/vertx/transformer/VertxFutureTransformer.java">这里</a>。</p>
+<hr>
+<h4 id="关于类加载"><a href="#关于类加载" class="headerlink" title="关于类加载"></a>关于类加载</h4><p>由于<strong>参与修改</strong>的<strong>所有类</strong>都是由**<code>appClassLoader</code><strong>加载的，所以不会出现什么问题。但是，如果我们要按照上述设计对</strong>jdk自带(jre/lib)的一些类<strong>进行修改呢？比如说实现<code>ThreadLocal</code>在<code>ThreadPoolExecutor#execute</code>中的传递，思路似乎没多大区别，无非就是对传入<code>ThreadPoolExecutor#execute</code>中的<code>Runnable</code>做一层包装（设该包装类为</strong>类A<strong>）。然后当我们运行是却会发现每次执行<code>execute</code>方法时都会得到一个<code>NoClassDefFoundException</code>，无法找到</strong>类A**。</p>
+<p>这是为什么呢？明明<strong>类A</strong>对应的<code>class</code>文件是<strong>存在的</strong>(build目录下)，但虚拟机为什么在执行<code>execute</code>方法时找不到它呢？</p>
+<p>这是因为<code>ThreadPoolExecutor</code>这个类是由<code>BootStrapClassLoader</code>加载的，而正常情况下类A并不处于<code>BootStrapClassLoader</code>的查找范围之中，所以就引发了这个异常。概览如下：</p>
+<ul>
+<li>在虚拟机第一次执行到<code>execute</code>方法中我们修改过的代码时，此时类A在此处仅仅是一个符号引用，这时必然会请求虚拟机去<a href="http://hg.openjdk.java.net/jdk8/jdk8/hotspot/file/87ee5ee27509/src/share/vm/oops/constantPool.cpp#l180">解析</a>这个符号引用。这里会去根据<a href="http://hg.openjdk.java.net/jdk8/jdk8/hotspot/file/87ee5ee27509/src/share/vm/oops/constantPool.cpp#l212">加载ThreadPoolExecutor的类加载器</a>(<code>BootStrapClassLoader</code>)以及<strong>类A</strong>的类名在内存中<a href="http://hg.openjdk.java.net/jdk8/jdk8/hotspot/file/87ee5ee27509/src/share/vm/classfile/systemDictionary.cpp#l616">全局查找这个类</a>，查找不到则会尝试<a href="http://hg.openjdk.java.net/jdk8/jdk8/hotspot/file/87ee5ee27509/src/share/vm/classfile/systemDictionary.cpp#l1289">加载这个类</a>，如果这两个过程都找不到对应的类，就会抛出上述异常。</li>
+</ul>
+<p>像alibaba的<a href="https://github.com/alibaba/transmittable-thread-local"><code>TransmittableThreadLocal</code></a> 是需要修改rt.jar中的类的(比如<code>ThreadPoolExecutor</code>)，这些核心类都是由BootstrapClassloader加载的。但是我们引进来的<a href="https://github.com/alibaba/transmittable-thread-local"><code>TransmittableThreadLocal</code></a> 默认由AppClassLoader加载，这势必会导致在重新加载被修改的由class时抛出NoClassDefFoundException。所以<a href="https://github.com/alibaba/transmittable-thread-local"><code>TransmittableThreadLocal</code></a> 中<strong>参与核心类库修改的类必须要被添加到bootClassPath中</strong>(由<code>BootstrapClassLoader</code>加载)。</p>
+<h3 id="2-基于netty的异步io操作"><a href="#2-基于netty的异步io操作" class="headerlink" title="2. 基于netty的异步io操作"></a>2. 基于netty的异步io操作</h3><p>vertx的io操作基于netty，netty的io多路复用基于java nio，nio只能说是非阻塞式io。但是netty提供给上层应用程序的io操作确实异步的。netty会不停的轮询就绪的io事件，然后把vertx感兴趣的事件包装好通知到vertx（比如有数据可读的时候），最后vertx再通知到我们的业务层。</p>
+<p>其实这里的实现思路是一样的，就不赘述了。简单点就是在往vertx中塞回调时对这个回调进行上述包装即可。</p>
+<hr>
+<h1 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h1><p>本文主要探讨了如何在基于vertx的异步环境中追踪一次完整的函数调用，以及实现过程中可能会碰到的问题。</p>
+<p>上述内容的源码可在<a href="https://github.com/scientificCommunity/blog-sample">我的github</a>上找到。</p>
+]]></content>
+      <categories>
+        <category>技术</category>
+      </categories>
+      <tags>
+        <tag>技术</tag>
+        <tag>jvm</tag>
+        <tag>实战</tag>
+        <tag>Vertx</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>seata源码分析之全局事务的开启跟xid的传递</title>
     <url>/posts/b310611e/</url>
     <content><![CDATA[<h1 id="概览"><a href="#概览" class="headerlink" title="概览"></a>概览</h1><h3 id="首先我们通过-GlobalTransactional这个注解开启一个全局事务，而GlobalTransactionScanner-wrapIfNecessary-会为所有方法上加了这个注解的bean注入一个包装了GlobalTransactionalInterceptor实例的advisor，然后返回一个代理对象。GlobalTransactionalInterceptor会在该bean的方法调用前进行拦截，判断是否开启全局事务"><a href="#首先我们通过-GlobalTransactional这个注解开启一个全局事务，而GlobalTransactionScanner-wrapIfNecessary-会为所有方法上加了这个注解的bean注入一个包装了GlobalTransactionalInterceptor实例的advisor，然后返回一个代理对象。GlobalTransactionalInterceptor会在该bean的方法调用前进行拦截，判断是否开启全局事务" class="headerlink" title="首先我们通过@GlobalTransactional这个注解开启一个全局事务，而GlobalTransactionScanner.wrapIfNecessary()会为所有方法上加了这个注解的bean注入一个包装了GlobalTransactionalInterceptor实例的advisor，然后返回一个代理对象。GlobalTransactionalInterceptor会在该bean的方法调用前进行拦截，判断是否开启全局事务"></a>首先我们通过@GlobalTransactional这个注解开启一个全局事务，而GlobalTransactionScanner.wrapIfNecessary()会为所有方法上加了这个注解的bean注入一个包装了GlobalTransactionalInterceptor实例的advisor，然后返回一个代理对象。GlobalTransactionalInterceptor会在该bean的方法调用前进行拦截，判断是否开启全局事务</h3><p>上源码，关键位置我打了注释</p>
@@ -336,11 +471,6 @@
       </tags>
   </entry>
   <entry>
-    <title>k8s</title>
-    <url>/posts/655061ae/</url>
-    <content><![CDATA[]]></content>
-  </entry>
-  <entry>
     <title>单元测试之kotlin mockk用法浅析</title>
     <url>/posts/a1887a80/</url>
     <content><![CDATA[<h2 id="本例用到的类定义"><a href="#本例用到的类定义" class="headerlink" title="本例用到的类定义"></a>本例用到的类定义</h2><figure class="highlight java"><table><tr><td class="code"><pre><span class="line"><span class="meta">@Slf4j</span></span><br><span class="line"><span class="keyword">public</span> <span class="class"><span class="keyword">class</span> <span class="title">ServiceImplA</span> <span class="keyword">implements</span> <span class="title">Service</span> </span>&#123;</span><br><span class="line"></span><br><span class="line">    <span class="meta">@Override</span></span><br><span class="line">    <span class="function"><span class="keyword">public</span> <span class="keyword">void</span> <span class="title">doSomething1</span><span class="params">(String s)</span> </span>&#123;</span><br><span class="line">        log.info(<span class="string">&quot;input is:&#123;&#125;&quot;</span>, s);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="meta">@Override</span></span><br><span class="line">    <span class="function"><span class="keyword">public</span> String <span class="title">doSomething2</span><span class="params">(String s)</span> </span>&#123;</span><br><span class="line">        log.info(<span class="string">&quot;doSomething2,input:&#123;&#125;&quot;</span>, s);</span><br><span class="line">        <span class="keyword">return</span> s;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
@@ -381,54 +511,6 @@
         <tag>技术</tag>
         <tag>浅析</tag>
         <tag>unit test</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>Mysql之浅析AUTO_INCREMENT</title>
-    <url>/posts/34050/</url>
-    <content><![CDATA[<p><code>AUTO_INCREMENT</code>用于为表中的列设置一个自增序列，在非集群模式下，用它来为主键列自动生成值是一件很方便的事。并且，Mysql提供了一系列的锁机制来保证它的性能跟可靠性，通过这些锁机制，我们可以让它变得很高效。</p>
-<h2 id="术语"><a href="#术语" class="headerlink" title="术语"></a>术语</h2><p>先来了解后面将要用到的术语。</p>
-<ul>
-<li>Simple inserts  能预先知道插入行数的语句。比如说单行插入（不包括<a href="https://dev.mysql.com/doc/refman/8.0/en/insert-on-duplicate.html">INSERT … ON DUPLICATE KEY UPDATE</a>），不带子句的多行插入（自增列不赋值或全赋值）。</li>
-<li>Bulk inserts  不能能预先知道插入行数的语句。比如<a href="https://dev.mysql.com/doc/refman/8.0/en/insert-select.html">INSERT … SELECT</a>, <a href="https://dev.mysql.com/doc/refman/8.0/en/replace.html">REPLACE … SELECT</a> 。这种模式下，<code>InnoDB</code> 会在处理时为每一行的自增列一次分配一个自增值</li>
-<li>Mixed-mode inserts  <figure class="highlight sql"><table><tr><td class="code"><pre><span class="line"><span class="keyword">INSERT</span> <span class="keyword">INTO</span> t1 (c1,c2) <span class="keyword">VALUES</span> (<span class="number">1</span>,<span class="string">&#x27;a&#x27;</span>), (<span class="keyword">NULL</span>,<span class="string">&#x27;b&#x27;</span>), (<span class="number">5</span>,<span class="string">&#x27;c&#x27;</span>), (<span class="keyword">NULL</span>,<span class="string">&#x27;d&#x27;</span>);</span><br></pre></td></tr></table></figure>
-  <a href="https://dev.mysql.com/doc/refman/8.0/en/insert-on-duplicate.html">INSERT … ON DUPLICATE KEY UPDATE</a></li>
-<li>Insert-like  以上所有插入语句的统称</li>
-</ul>
-<h2 id="锁模式"><a href="#锁模式" class="headerlink" title="锁模式"></a>锁模式</h2><p>锁模式在启动时通过<code>innodb_autoinc_lock_mode</code>这个变量来配置，它有3个值：<code>0, 1, 2</code>。分别对应<code>traditional</code>(传统)、<code>consecutive</code>(连续)、<code>interleaved</code>(交错)3种模式。</p>
-<p>在<code>Mysql5.6~5.7</code>里，这个配置项的默认值是<code>1</code>，从<code>Mysql8</code>开始，它的默认值<code>2</code>。这个一方面是因为模式<code>2</code>的性能更好，另一方面是因为从<code>Mysql8</code>开始，默认的主从复制的方式由<code>statement-based</code> 改为了<code>row based</code>。<code>row based</code> 能保证<code>innodb_autoinc_lock_mode=2</code>时主从复制时的数据不会出现不一致的问题。好了，下面开始详细了解这三种锁模式吧！</p>
-<ul>
-<li>traditional  在这种模式下，Mysql所有的<code>Insert-like</code>操作都会设置一个表级别的<code>AUTO-INC</code> 锁，这个锁会在单条语句执行完毕时释放。  也就是说，如果有多个事务同时对同一张表执行<code>Insert-like</code> 操作，那么，即使它们没有操作同一条记录，也会串行执行。所以，它的性能相对另外两种模式来说会比较糟糕。</li>
-<li>consecutive  在这种模式下，对于<code>Simple inserts</code>语句，<code>Mysql</code>会在语句执行的初始阶段将一条语句需要的所有自增值会一次性分配出来，并且通过设置一个互斥量来保证自增序列的一致性，一旦自增值生成完毕，这个互斥量会立即释放，不需要等到语句执行结束。  所以，在<code>consecutive</code>模式，多事务并发执行<code>Simple inserts</code>这类语句时， 相对traditional模式，性能会有比较大的提升。  由于一开始就为语句分配了所有需要的自增值，那么对于像<code>Mixed-mode inserts</code>这类语句，就有可能多分配了一些值给它，从而导致自增序列出现”<strong>空隙</strong>“。而<code>traditional</code>模式因为每一次只会为一条记录分配自增值，所有不会有这种问题。  另外，对于<code>Bulk inserts</code>语句，依然会采取<code>AUTO-INC</code>锁。所以，如果有一条<code>Bulk inserts</code>语句正在执行的话，<code>Simple inserts</code>也必须等到该语句执行完毕才能继续执行。</li>
-<li>interleaved  在这种模式下，对于所有的<code>Insert-like</code>语句，都不会存在表级别的<code>AUTO-INC</code>锁，意味着同一张表上的多个语句并发时阻塞会大幅减少。  但是，这种模式必须运行在<code>row based</code>或者<code>mixed-format</code>(其实说白了也是row based，只不过mysql会根据自增模式为不安全的语句自动选择row based模式)复制模式下。因为<code>interleaved</code>这种模式下对于相同顺序的语句每次执行行都会产生不同的结果(谁竞争到<strong>互斥量</strong>，谁就能获得生成自增值的权利)，所以，如果复制模式是<code>statement-based</code>或者通过<code>binlog</code>进行数据恢复时(牵扯到binlog的语句重放)，可能会导致数据不一致。</li>
-</ul>
-<h2 id="注意点"><a href="#注意点" class="headerlink" title="注意点"></a>注意点</h2><ul>
-<li>自增值的生成后是不能回滚的，所以自增值生成后，事务回滚了，那么那些已经生成的自增值就丢失了，从而使自增列的数据出现空隙</li>
-<li>正常情况下，自增列是不存在<code>0</code>这个值的。所以，如果插入语句中对自增列设置的值为<code>0</code>或者<code>null</code>，就会自动应用自增序列。  那么，如果想在自增列中插入为0这个值，怎么办呢？可以通过将<a href="https://dev.mysql.com/doc/refman/8.0/en/sql-mode.html#sqlmode_no_auto_value_on_zero">SQL Mode</a>设置为<code>NO_AUTO_VALUE_ON_ZERO</code>即可</li>
-<li>在Mysql5.7以及更早之前，自增序列的计数器(<code>auto-increment counter</code>)是保存在内存中的。<code>auto-increment counter</code>在每次Mysql重新启动后通过类似下面的这种语句进行初始化：  <figure class="highlight sql"><table><tr><td class="code"><pre><span class="line"><span class="keyword">SELECT</span> <span class="built_in">MAX</span>(AUTO_INC_COLUMN) <span class="keyword">FROM</span> table_name <span class="keyword">FOR</span> UPDATE</span><br></pre></td></tr></table></figure>
-  而从<code>Mysql8</code>开始，<code>auto-increment counter</code>被存储在了<code>redo log</code>中，并且每次变化都会刷新到<code>redo log</code>中。另外，我们可以通过<a href="https://dev.mysql.com/doc/refman/8.0/en/alter-table.html">ALTER TABLE … AUTO_INCREMENT = N</a> 来主动修改<br>  <code>auto-increment counter</code>。</li>
-</ul>
-<h2 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h2><ol>
-<li>单实例下，可以设置<code>innodb_autoinc_lock_mode=2</code></li>
-<li>主从<ol>
-<li>复制模式为<code>statement-based</code>，设置<code>innodb_autoinc_lock_mode=1</code></li>
-<li>复制模式为<code>row based</code>或者<code>mixed-format</code>，设置<code>innodb_autoinc_lock_mode=2</code></li>
-</ol>
-</li>
-</ol>
-<h2 id="参考链接"><a href="#参考链接" class="headerlink" title="参考链接"></a>参考链接</h2><ul>
-<li><strong><strong><a href="https://dev.mysql.com/doc/refman/8.0/en/innodb-auto-increment-handling.html#innodb-auto-increment-lock-mode-usage-implications">15.6.1.6 AUTO_INCREMENT Handling in InnoDB</a></strong></strong></li>
-<li><strong><a href="https://dev.mysql.com/doc/refman/8.0/en/innodb-recovery.html">15.18.2 InnoDB Recovery</a></strong></li>
-<li><strong><strong><a href="https://dev.mysql.com/doc/refman/8.0/en/replication-features-auto-increment.html">17.5.1.1 Replication and AUTO_INCREMENT</a></strong></strong></li>
-<li><strong><a href="https://dev.mysql.com/doc/refman/8.0/en/example-auto-increment.html">3.6.9 Using AUTO_INCREMENT</a></strong></li>
-</ul>
-]]></content>
-      <categories>
-        <category>技术</category>
-      </categories>
-      <tags>
-        <tag>技术</tag>
-        <tag>Mysql</tag>
       </tags>
   </entry>
   <entry>
@@ -517,6 +599,30 @@
       </tags>
   </entry>
   <entry>
+    <title>杂谈之容器内访问宿主机docker命令</title>
+    <url>/posts/47873/</url>
+    <content><![CDATA[<h1 id="原理"><a href="#原理" class="headerlink" title="原理"></a>原理</h1><p><code>docker</code>在被安装时默认会在<code>/var/lib/docker.sock</code>创建<code>unix domain socket</code>。<code>docker daemon</code>会通过它来监听<a href="https://docs.docker.com/engine/api/">Docker Engine API</a> 请求。而<code>docker</code>命令本质上是在<code>/bin/docker</code>里包装了这些请求交互的细节(猜想，有研究过的朋友可以分享一下🤝)。所以我们只需要将这两个文件挂载到容器中即可。</p>
+<p><em>如果只挂载<code>/var/lib/docker.sock</code>，我们查看容器列表(<code>docker ps</code>)就需要这样操作：</em></p>
+<figure class="highlight shell"><table><tr><td class="code"><pre><span class="line">curl -s --unix-socket /var/run/docker.sock http://dummy/containers/json</span><br></pre></td></tr></table></figure>
+
+<p><strong>总的来说：</strong></p>
+<ol>
+<li><code>/var/lib/docker.sock</code>保证能跟<code>docker daemon</code>通信</li>
+<li><code>/bin/docker</code>隐藏通信细节<h1 id="具体操作"><a href="#具体操作" class="headerlink" title="具体操作"></a>具体操作</h1><figure class="highlight shell"><table><tr><td class="code"><pre><span class="line">docker run -d --name &lt;yourContainerName&gt;</span><br><span class="line">    -v /var/run/docker.sock:/var/run/docker.sock \</span><br><span class="line">	-v /bin/docker:/bin/docker \</span><br></pre></td></tr></table></figure>
+<h1 id="注意点"><a href="#注意点" class="headerlink" title="注意点"></a>注意点</h1></li>
+<li>如果<code>docker</code>容器内需要访问宿主机<code>docker</code>命令的用户不是<code>root</code>用户或者不属于<code>docker</code>组的用户，则还需执行： <figure class="highlight shell"><table><tr><td class="code"><pre><span class="line">sudo usermod -aG docker $USER</span><br></pre></td></tr></table></figure></li>
+<li>如果容器基于<code>Alpine Linux</code>，基于 <code>glibc</code> 构建的<code>/bin/docker</code>是无法执行的。所以还需要执行如下操作： <figure class="highlight shell"><table><tr><td class="code"><pre><span class="line">wget -q -O /etc/apk/keys/sgerrand.rsa.pub https://alpine-pkgs.sgerrand.com/sgerrand.rsa.pub</span><br><span class="line"></span><br><span class="line">wget https://github.com/sgerrand/alpine-pkg-glibc/releases/download/2.34-r0/glibc-2.34-r0.apk</span><br><span class="line"></span><br><span class="line">apk add glibc-2.34-r0.apk</span><br></pre></td></tr></table></figure>
+<h1 id="参考"><a href="#参考" class="headerlink" title="参考"></a>参考</h1><a href="https://blog.csdn.net/scientificCommunity/article/details/120386344">杂谈之非root用户运行docker命令</a><br><a href="https://docs.docker.com/engine/reference/commandline/dockerd/#daemon-socket-option">Daemon socket option</a><br><a href="https://github.com/sgerrand/alpine-pkg-glibc">alpine-pkg-glibc</a></li>
+</ol>
+]]></content>
+      <categories>
+        <category>技术</category>
+      </categories>
+      <tags>
+        <tag>技术</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>杂谈之树莓派挂载硬盘</title>
     <url>/posts/4224/</url>
     <content><![CDATA[<h2 id="挂载步骤"><a href="#挂载步骤" class="headerlink" title="挂载步骤"></a>挂载步骤</h2><ol>
@@ -551,30 +657,6 @@
 <p><code>docker</code>命令本质上是通过访问(读写)<code>/var/run/docker.sock</code>来完成与<code>docker</code>的交互。<code>/var/run/docker.sock</code>默认属于<code>docker</code>组以及<code>root</code>用户，所以，要想获得<code>docker</code>命令执行权，需要将用户添加到<code>docker</code>组中。<br>ps: 如果docker组不存在，则需先执行：<code>sudo groupadd docker</code></p>
 <h2 id="2-切换到docker组"><a href="#2-切换到docker组" class="headerlink" title="2. 切换到docker组"></a>2. 切换到docker组</h2><figure class="highlight shell"><table><tr><td class="code"><pre><span class="line">newgrp docker</span><br></pre></td></tr></table></figure>
 <h1 id="参考"><a href="#参考" class="headerlink" title="参考"></a>参考</h1><p><a href="https://docs.docker.com/engine/reference/commandline/dockerd/#daemon-socket-option">daemon-socket-option</a></p>
-]]></content>
-      <categories>
-        <category>技术</category>
-      </categories>
-      <tags>
-        <tag>技术</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>杂谈之容器内访问宿主机docker命令</title>
-    <url>/posts/47873/</url>
-    <content><![CDATA[<h1 id="原理"><a href="#原理" class="headerlink" title="原理"></a>原理</h1><p><code>docker</code>在被安装时默认会在<code>/var/lib/docker.sock</code>创建<code>unix domain socket</code>。<code>docker daemon</code>会通过它来监听<a href="https://docs.docker.com/engine/api/">Docker Engine API</a> 请求。而<code>docker</code>命令本质上是在<code>/bin/docker</code>里包装了这些请求交互的细节(猜想，有研究过的朋友可以分享一下🤝)。所以我们只需要将这两个文件挂载到容器中即可。</p>
-<p><em>如果只挂载<code>/var/lib/docker.sock</code>，我们查看容器列表(<code>docker ps</code>)就需要这样操作：</em></p>
-<figure class="highlight shell"><table><tr><td class="code"><pre><span class="line">curl -s --unix-socket /var/run/docker.sock http://dummy/containers/json</span><br></pre></td></tr></table></figure>
-
-<p><strong>总的来说：</strong></p>
-<ol>
-<li><code>/var/lib/docker.sock</code>保证能跟<code>docker daemon</code>通信</li>
-<li><code>/bin/docker</code>隐藏通信细节<h1 id="具体操作"><a href="#具体操作" class="headerlink" title="具体操作"></a>具体操作</h1><figure class="highlight shell"><table><tr><td class="code"><pre><span class="line">docker run -d --name &lt;yourContainerName&gt;</span><br><span class="line">    -v /var/run/docker.sock:/var/run/docker.sock \</span><br><span class="line">	-v /bin/docker:/bin/docker \</span><br></pre></td></tr></table></figure>
-<h1 id="注意点"><a href="#注意点" class="headerlink" title="注意点"></a>注意点</h1></li>
-<li>如果<code>docker</code>容器内需要访问宿主机<code>docker</code>命令的用户不是<code>root</code>用户或者不属于<code>docker</code>组的用户，则还需执行： <figure class="highlight shell"><table><tr><td class="code"><pre><span class="line">sudo usermod -aG docker $USER</span><br></pre></td></tr></table></figure></li>
-<li>如果容器基于<code>Alpine Linux</code>，基于 <code>glibc</code> 构建的<code>/bin/docker</code>是无法执行的。所以还需要执行如下操作： <figure class="highlight shell"><table><tr><td class="code"><pre><span class="line">wget -q -O /etc/apk/keys/sgerrand.rsa.pub https://alpine-pkgs.sgerrand.com/sgerrand.rsa.pub</span><br><span class="line"></span><br><span class="line">wget https://github.com/sgerrand/alpine-pkg-glibc/releases/download/2.34-r0/glibc-2.34-r0.apk</span><br><span class="line"></span><br><span class="line">apk add glibc-2.34-r0.apk</span><br></pre></td></tr></table></figure>
-<h1 id="参考"><a href="#参考" class="headerlink" title="参考"></a>参考</h1><a href="https://blog.csdn.net/scientificCommunity/article/details/120386344">杂谈之非root用户运行docker命令</a><br><a href="https://docs.docker.com/engine/reference/commandline/dockerd/#daemon-socket-option">Daemon socket option</a><br><a href="https://github.com/sgerrand/alpine-pkg-glibc">alpine-pkg-glibc</a></li>
-</ol>
 ]]></content>
       <categories>
         <category>技术</category>
@@ -718,88 +800,6 @@
         <tag>技术</tag>
         <tag>网络通信</tag>
         <tag>随笔</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>Vertx实战之如何追踪异步函数调用</title>
-    <url>/posts/6a250a7b/</url>
-    <content><![CDATA[<h1 id="背景"><a href="#背景" class="headerlink" title="背景"></a>背景</h1><p>日常开发中我们经常需要处理各种系统问题，而这些系统问题通常由一些非预期的因素引起（比如非预期的输入，内存不够，网络波动等）。此时就需要知道</p>
-<ol>
-<li>本次系统问题影响了谁？</li>
-<li>如果本次系统问题是因为非预期的输入而导致的，那么这个非预期的输入是什么？</li>
-</ol>
-<p>上述两点在同步编程里可以通过全局try-catch来实现。但在异步编程里该怎么办呢？</p>
-<hr>
-<h1 id="思路"><a href="#思路" class="headerlink" title="思路"></a>思路</h1><p>我的想法是绑定一个唯一id到一次完整的请求调用中（这个完整取决于我们想要监控的范围），无论程序执行到何处，我们总能拿到与请求一一对应的<code>调用上下文</code>的id。</p>
-<p>  我将分两种场景进行讨论。一种是同步或基于jut下的线程池类进行异步调用的应用程序（如基于spring5之前的应用程序）。另外一种基于vertx（底层基于netty）的应用程序。</p>
-<hr>
-<h2 id="技术栈"><a href="#技术栈" class="headerlink" title="技术栈"></a>技术栈</h2><p><code>vert.x 4</code>、<code>netty 4</code>、<a href="https://github.com/alibaba/transmittable-thread-local"><code>alibaba TransmittableThreadLocal</code></a>、<code>jboss javassist</code>、hotspot类加载&amp;方法调用</p>
-<hr>
-<h2 id="1-同步or基于jdk的异步"><a href="#1-同步or基于jdk的异步" class="headerlink" title="1. 同步or基于jdk的异步"></a>1. 同步or基于jdk的异步</h2><p><strong>关于这种场景，有以下几种实现：</strong></p>
-<ol>
-<li><p><strong>程序中的函数调用是完全同步的</strong></p>
-<p> 则可通过<code>java.lang.ThreadLocal</code>绑定一个唯一id到当前线程。入口处生成，出口处销毁。<br> 如果我们用的是logback，也可通过 <code>org.slf4j.MDC</code> 来实现这个功能。其内部也是基于ThreadLocal。</p>
-</li>
-<li><p><strong>程序中函数调用是异步的，异步通过新建<code>java.lang.Thread</code> 的方式实现。</strong></p>
-<p> 这里可通过<code>java.lang.InheritableThreadLocal</code> 绑定一个唯一id到当前线程。<code>Thread</code>的构造函数里会自动把通过<code>InheritableThreadLocal</code> 绑定到当前线程的数据拷贝到这个正在创建的<code>Thread</code> 里。所以，只要这个<code>Thread</code> 是在我们<strong>需要监控的区域（当前线程通过</strong><code>InheritableThreadLocal</code><strong>绑定了id后）</strong>创建的，就能实现这个唯一id的跨线程传递。</p>
-</li>
-<li><p><strong>程序中函数调用是异步的，异步通过<code>java.util.concurrent</code> 下的线程池类实现。</strong></p>
-<p> 由于线程池中的线程是可以复用的，所以，如果我们往线程池中丢任务时，有两种情况：</p>
-<ol>
-<li>线程池创建新的线程来执行该任务（比如线程池中的线程数&lt;coreSize）。这种情况下<code>InheritableThreadLocal</code> 依然是有效的。</li>
-<li>线程池把任务分配给了已有线程（比如线程池中的线程数≥coreSize并且待执行任务队列没有填满）。这种情况下<code>InheritableThreadLocal</code> 是无法生效的（线程池中的存活线程会循环拉取等待任务队列中的task去执行，而这个过程是没有<code>InheritableThreadLocal</code> 拷贝的）。所以，这里可以用阿里的<code>[TransmittableThreadLocal](https://github.com/alibaba/transmittable-thread-local)</code> 组件来实现这个唯一id在线程池中的传递（其核心原理是在<code>Runnable</code> 中用一个变量来存储当前线程的ThreadLocal值，当线程执行此Runnable时再拿出来）。</li>
-</ol>
-</li>
-</ol>
-<hr>
-<h3 id="实现思路总结"><a href="#实现思路总结" class="headerlink" title="实现思路总结"></a>实现思路总结</h3><p>  异步环境下的关键在于如何跨线程传递ThreadLocal的值</p>
-<hr>
-<h2 id="2-Vertx-中的实现"><a href="#2-Vertx-中的实现" class="headerlink" title="2. Vertx 中的实现"></a>2. Vertx 中的实现</h2><p>  <code>vertx</code>是一个类似于<code>spring</code>系列的用于构建分布式微服务的框架。基于<code>vertx</code>构建的应用程序最大的特点是<strong>无阻塞</strong>&amp;<strong>全异步。</strong></p>
-<p>  vertx里的异步主要分两种。一种是在eventbus上传递消息的异步。另一种是基于netty的io操作异步</p>
-<h3 id="1-eventbus上异步传递消息"><a href="#1-eventbus上异步传递消息" class="headerlink" title="1. eventbus上异步传递消息"></a>1. eventbus上异步传递消息</h3><p>   先来看一个简单的示例程序</p>
-<figure class="highlight java"><table><tr><td class="code"><pre><span class="line"><span class="keyword">static</span> <span class="keyword">final</span> String ADDRESS_1 = <span class="string">&quot;address1&quot;</span>;</span><br><span class="line"> <span class="keyword">static</span> <span class="keyword">final</span> String MESSAGE_1 = <span class="string">&quot;message1&quot;</span>;</span><br><span class="line"> <span class="keyword">static</span> <span class="keyword">final</span> String REPLY_MESSAGE_1 = <span class="string">&quot;replyMessage1&quot;</span>;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">void</span> <span class="title">sendMsgByEventbus</span><span class="params">()</span> </span>&#123;</span><br><span class="line">       <span class="comment">//初始化一个具有默认设置的vertx实例</span></span><br><span class="line">       Vertx vertx = Vertx.vertx();</span><br><span class="line"></span><br><span class="line">       <span class="comment">//注册一个handler/consumer到eventbus</span></span><br><span class="line">       vertx.eventBus().consumer(ADDRESS_1, event -&gt; &#123;</span><br><span class="line">           log.info(<span class="string">&quot;receive msg:&#123;&#125;&quot;</span>, event.body());</span><br><span class="line">           event.reply(REPLY_MESSAGE_1);</span><br><span class="line">       &#125;);</span><br><span class="line"></span><br><span class="line">       <span class="comment">//通过eventbus发送消息给刚注册的handler</span></span><br><span class="line">       vertx.eventBus().request(ADDRESS_1, MESSAGE_1, reply -&gt; &#123;</span><br><span class="line">           log.info(<span class="string">&quot;receive replied msg:&#123;&#125;&quot;</span>, reply.result().body());</span><br><span class="line">       &#125;);</span><br><span class="line">   &#125;</span><br></pre></td></tr></table></figure>
-
-<p>下面是程序执行的结果</p>
-<figure class="highlight java"><table><tr><td class="code"><pre><span class="line">[vert.x-eventloop-thread-<span class="number">0</span>] - receive msg:message1</span><br><span class="line">[vert.x-eventloop-thread-<span class="number">0</span>] - receive replied msg:replyMessage1</span><br></pre></td></tr></table></figure>
-
-<p>可以看到发起调用的是主线程，处理调用跟处理回调的是线程<code>vert.x-eventloop-thread-0</code>。</p>
-<p>那么，这个异步是如何实现的呢？显然，异步最明显的体现就是最后发送消息这里。所以我们就从<code>Eventbus#request</code> 逐步深入。</p>
-<p><strong>大概流程是这样的：</strong></p>
-<ol>
-<li>从<code>eventbus</code>中根据我们传入的<code>address</code>拿到所有注册到这个地址上的handler。</li>
-<li>将对应<code>handler</code>对传入消息的处理包装成一个<code>runnable</code>丢进一个<code>queue</code></li>
-<li><code>eventLoop Thread</code>从这个<code>queue</code>中抓取<code>task</code>执行</li>
-</ol>
-<p><strong>关键代码片段如下：</strong></p>
-<figure class="highlight java"><table><tr><td class="code"><pre><span class="line"><span class="comment">//与本主题无关的只展示调用链路供大家参考</span></span><br><span class="line"><span class="comment">//Eventbus#request</span></span><br><span class="line"><span class="comment">//  EventbusImpl#request</span></span><br><span class="line"><span class="comment">//    EventbusImpl#sendOrPubInternal</span></span><br><span class="line"><span class="comment">//      EventbusImpl#sendOrPubInternal</span></span><br><span class="line"><span class="comment">//        EventbusImpl#OutboundDeliveryContext</span></span><br><span class="line"><span class="comment">//          EventbusImpl#sendOrPub</span></span><br><span class="line"><span class="comment">//            EventbusImpl#sendLocally</span></span><br><span class="line"><span class="comment">//              EventbusImpl#deliverMessageLocally</span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">protected</span> ReplyException <span class="title">deliverMessageLocally</span><span class="params">(MessageImpl msg)</span> </span>&#123;</span><br><span class="line">	  <span class="comment">//1.找出跟msg.address()的handlerHolder</span></span><br><span class="line">	  ConcurrentCyclicSequence&lt;HandlerHolder&gt; handlers = handlerMap.get(msg.address());</span><br><span class="line">	  <span class="keyword">if</span> (handlers != <span class="keyword">null</span>) &#123;</span><br><span class="line">	    <span class="keyword">for</span> (HandlerHolder holder: handlers) &#123;</span><br><span class="line">		  <span class="comment">//2.依次调用这些handler的receive方法</span></span><br><span class="line">	      holder.handler.receive(msg.copyBeforeReceive());</span><br><span class="line">	    &#125;</span><br><span class="line">	    <span class="keyword">return</span> <span class="keyword">null</span>;</span><br><span class="line">	  &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">receive</span><span class="params">(MessageImpl msg)</span> </span>&#123;</span><br><span class="line">	  <span class="comment">//3.匿名异步任务进队列</span></span><br><span class="line">	  context.nettyEventLoop().execute(() -&gt; &#123;</span><br><span class="line">	     doReceive(msg);</span><br><span class="line">	  &#125;);</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">//SingleThreadEventExecutor#execute</span></span><br><span class="line"><span class="function"><span class="keyword">private</span> <span class="keyword">void</span> <span class="title">execute</span><span class="params">(Runnable task, <span class="keyword">boolean</span> immediate)</span> </span>&#123;</span><br><span class="line">	<span class="comment">//比较当前线程是否是eventLoop线程，是则返回true</span></span><br><span class="line">	<span class="comment">//由于我们在main里调用的eventbus#request,所以这里是false</span></span><br><span class="line">    <span class="keyword">boolean</span> inEventLoop = inEventLoop();</span><br><span class="line"></span><br><span class="line">	<span class="comment">//4. 添加到queue中，后面执行任务的线程会调用该queue的poll方法</span></span><br><span class="line">    addTask(task);</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (!inEventLoop) &#123;</span><br><span class="line">		<span class="comment">//如果当前eventLoop对象的thread为空则创建一个Thread绑定到当前eventLoop</span></span><br><span class="line">        startThread();</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">//eventLoop中运行的thread通过这个方法从上面说的queue中拿task执行</span></span><br><span class="line"><span class="comment">//外层会循环执行该runAllTasks，直到Eventloop#shutdownGracefully被执行</span></span><br><span class="line"><span class="comment">//参考NioEventLoop#run</span></span><br><span class="line"><span class="function"><span class="keyword">protected</span> <span class="keyword">boolean</span> <span class="title">runAllTasks</span><span class="params">(<span class="keyword">long</span> timeoutNanos)</span> </span>&#123;</span><br><span class="line">      Runnable task = pollTask();</span><br><span class="line">      </span><br><span class="line">      <span class="keyword">for</span> (;;) &#123;</span><br><span class="line">		  <span class="comment">//5.执行task</span></span><br><span class="line">          safeExecute(task);</span><br><span class="line"></span><br><span class="line">          runTasks ++;</span><br><span class="line">					</span><br><span class="line">		  <span class="comment">//如果队列中还有task，则继续执行</span></span><br><span class="line">          task = pollTask();</span><br><span class="line">          <span class="keyword">if</span> (task == <span class="keyword">null</span>) &#123;</span><br><span class="line">              lastExecutionTime = ScheduledFutureTask.nanoTime();</span><br><span class="line">              <span class="keyword">break</span>;</span><br><span class="line">          &#125;</span><br><span class="line">      &#125;</span><br><span class="line">      <span class="keyword">return</span> <span class="keyword">true</span>;</span><br><span class="line">  &#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">protected</span> <span class="keyword">static</span> Runnable <span class="title">pollTaskFrom</span><span class="params">(Queue&lt;Runnable&gt; taskQueue)</span> </span>&#123;</span><br><span class="line">    <span class="keyword">for</span> (;;) &#123;</span><br><span class="line">        Runnable task = taskQueue.poll();</span><br><span class="line">        <span class="keyword">if</span> (task != WAKEUP_TASK) &#123;</span><br><span class="line">            <span class="keyword">return</span> task;</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">//safeExecute会去执行第3步中的匿名任务</span></span><br><span class="line"><span class="function"><span class="keyword">protected</span> <span class="keyword">boolean</span> <span class="title">doReceive</span><span class="params">(Message&lt;T&gt; message)</span> </span>&#123;</span><br><span class="line">		Handler&lt;Message&lt;T&gt;&gt; theHandler = handler;</span><br><span class="line">		</span><br><span class="line">		deliver(theHandler, message);</span><br><span class="line">		<span class="keyword">return</span> <span class="keyword">true</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">//MessageConsumerImpl#deliver</span></span><br><span class="line"><span class="comment">//  MessageConsumerImpl#dispatch</span></span><br><span class="line"><span class="comment">//    AbstractContext#dispatch</span></span><br><span class="line"><span class="comment">//      InboundDeliveryContext#dispatch   ++ 上一步的匿名Runnable会调用 </span></span><br><span class="line"><span class="comment">//        InboundDeliveryContext#next</span></span><br><span class="line"><span class="comment">//          MessageConsumerImpl#dispatch</span></span><br><span class="line"><span class="comment">//            DuplicatedContext#emit</span></span><br><span class="line"><span class="comment">//              EventLoopContext#emit</span></span><br><span class="line">&lt;T&gt; <span class="function"><span class="keyword">void</span> <span class="title">emit</span><span class="params">(AbstractContext ctx, T argument, Handler&lt;T&gt; task)</span> </span>&#123;</span><br><span class="line">    <span class="keyword">try</span> &#123;</span><br><span class="line">	  <span class="comment">//6.执行handler/task中的事件处理</span></span><br><span class="line">	  <span class="comment">//这个task就是我们之前通过Eventbus#consumer注册进来的</span></span><br><span class="line">      task.handle(argument);</span><br><span class="line">    &#125; <span class="keyword">catch</span> (Throwable t) &#123;</span><br><span class="line">      reportException(t);</span><br><span class="line">    &#125; <span class="keyword">finally</span> &#123;</span><br><span class="line">      ctx.endDispatch(prev);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-
-<p>我删减了一些不重要的部分，以便更易于理解。</p>
-<p>通过上面的代码片段我们可以发现，第3步的<code>SingleThreadEventExecutor#execute</code>往队列里push任务似乎是解决问题（跨线程传递唯一id）的关键。所以，如果我们能够<strong>在这个task进入<code>queue</code>之前往这个task中塞上当前线程的<code>ThreadLocal</code>值，待到这个<code>task</code>的<code>run</code>方法被执行时再把这个<code>ThreadLocal</code>值拿出来塞到当前线程（执行这个<code>task</code>的线程）的<code>ThreadLocal</code>中</strong>，问题就解决了。</p>
-<p>显然，我们需要修改这些类的代码。那么，怎么实现这个功能呢？</p>
-<p><code>java.lang.instrument</code> 提供了一系列运行时替换class字节码的技术。而<a href="https://github.com/jboss-javassist/javassist">jboss Javaassist</a> 则提供了一些列修改字节码的接口。所以我们只需要结合这两项技术再通过javaagent指令即可达成我们的目的。</p>
-<p>修改字节码的实现可参考<a href="https://github.com/scientificCommunity/blog-sample/blob/main/vertx4-transformer/src/main/java/org/baichuan/example/vertx/transformer/VertxFutureTransformer.java">这里</a>。</p>
-<hr>
-<h4 id="关于类加载"><a href="#关于类加载" class="headerlink" title="关于类加载"></a>关于类加载</h4><p>由于<strong>参与修改</strong>的<strong>所有类</strong>都是由**<code>appClassLoader</code><strong>加载的，所以不会出现什么问题。但是，如果我们要按照上述设计对</strong>jdk自带(jre/lib)的一些类<strong>进行修改呢？比如说实现<code>ThreadLocal</code>在<code>ThreadPoolExecutor#execute</code>中的传递，思路似乎没多大区别，无非就是对传入<code>ThreadPoolExecutor#execute</code>中的<code>Runnable</code>做一层包装（设该包装类为</strong>类A<strong>）。然后当我们运行是却会发现每次执行<code>execute</code>方法时都会得到一个<code>NoClassDefFoundException</code>，无法找到</strong>类A**。</p>
-<p>这是为什么呢？明明<strong>类A</strong>对应的<code>class</code>文件是<strong>存在的</strong>(build目录下)，但虚拟机为什么在执行<code>execute</code>方法时找不到它呢？</p>
-<p>这是因为<code>ThreadPoolExecutor</code>这个类是由<code>BootStrapClassLoader</code>加载的，而正常情况下类A并不处于<code>BootStrapClassLoader</code>的查找范围之中，所以就引发了这个异常。概览如下：</p>
-<ul>
-<li>在虚拟机第一次执行到<code>execute</code>方法中我们修改过的代码时，此时类A在此处仅仅是一个符号引用，这时必然会请求虚拟机去<a href="http://hg.openjdk.java.net/jdk8/jdk8/hotspot/file/87ee5ee27509/src/share/vm/oops/constantPool.cpp#l180">解析</a>这个符号引用。这里会去根据<a href="http://hg.openjdk.java.net/jdk8/jdk8/hotspot/file/87ee5ee27509/src/share/vm/oops/constantPool.cpp#l212">加载ThreadPoolExecutor的类加载器</a>(<code>BootStrapClassLoader</code>)以及<strong>类A</strong>的类名在内存中<a href="http://hg.openjdk.java.net/jdk8/jdk8/hotspot/file/87ee5ee27509/src/share/vm/classfile/systemDictionary.cpp#l616">全局查找这个类</a>，查找不到则会尝试<a href="http://hg.openjdk.java.net/jdk8/jdk8/hotspot/file/87ee5ee27509/src/share/vm/classfile/systemDictionary.cpp#l1289">加载这个类</a>，如果这两个过程都找不到对应的类，就会抛出上述异常。</li>
-</ul>
-<p>像alibaba的<a href="https://github.com/alibaba/transmittable-thread-local"><code>TransmittableThreadLocal</code></a> 是需要修改rt.jar中的类的(比如<code>ThreadPoolExecutor</code>)，这些核心类都是由BootstrapClassloader加载的。但是我们引进来的<a href="https://github.com/alibaba/transmittable-thread-local"><code>TransmittableThreadLocal</code></a> 默认由AppClassLoader加载，这势必会导致在重新加载被修改的由class时抛出NoClassDefFoundException。所以<a href="https://github.com/alibaba/transmittable-thread-local"><code>TransmittableThreadLocal</code></a> 中<strong>参与核心类库修改的类必须要被添加到bootClassPath中</strong>(由<code>BootstrapClassLoader</code>加载)。</p>
-<h3 id="2-基于netty的异步io操作"><a href="#2-基于netty的异步io操作" class="headerlink" title="2. 基于netty的异步io操作"></a>2. 基于netty的异步io操作</h3><p>vertx的io操作基于netty，netty的io多路复用基于java nio，nio只能说是非阻塞式io。但是netty提供给上层应用程序的io操作确实异步的。netty会不停的轮询就绪的io事件，然后把vertx感兴趣的事件包装好通知到vertx（比如有数据可读的时候），最后vertx再通知到我们的业务层。</p>
-<p>其实这里的实现思路是一样的，就不赘述了。简单点就是在往vertx中塞回调时对这个回调进行上述包装即可。</p>
-<hr>
-<h1 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h1><p>本文主要探讨了如何在基于vertx的异步环境中追踪一次完整的函数调用，以及实现过程中可能会碰到的问题。</p>
-<p>上述内容的源码可在<a href="https://github.com/scientificCommunity/blog-sample">我的github</a>上找到。</p>
-]]></content>
-      <categories>
-        <category>技术</category>
-      </categories>
-      <tags>
-        <tag>技术</tag>
-        <tag>jvm</tag>
-        <tag>实战</tag>
-        <tag>Vertx</tag>
       </tags>
   </entry>
 </search>
