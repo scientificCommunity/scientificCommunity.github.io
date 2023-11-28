@@ -9,4 +9,4 @@ else
 fi
 git push
 
-bash sync_upload.sh
+#bash sync_upload.sh
