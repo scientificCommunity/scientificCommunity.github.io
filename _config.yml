@@ -14,7 +14,7 @@ timezone: 'Asia/Shanghai'
 # URL
 ## Set your site url here. For example, if you use GitHub Page, set url as 'https://username.github.io/project'
 # url: https://scientificcommunity.github.io/
-url: https://www.krivers.space/
+url: https://www.krivers.fun/
 permalink: posts/:abbrlink/
 abbrlink:
   alg: crc32      #support crc16(default) and crc32
