@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.4.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/avatar.jpg">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/avatar.jpg">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+  <meta name="google-site-verification" content="dAEXqqGBo9pJ5H-Rd3DBK9vd8XTKa7uqPUTqfxdymBo">
+  <meta name="msvalidate.01" content="61A847A9CB3F5D2204C7BB5E36CC2C0E">
+  <meta name="yandex-verification" content="c5b6aa05eb3ca719">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"www.krivers.fun","root":"/","scheme":"Pisces","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":true,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":true,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}},"path":"search.xml"};
+  </script>
+
+  <meta name="description" content="vert.x是一个全异步框架，通过内部的event bus跟event loop做到了处处皆异步...">
+<meta property="og:type" content="article">
+<meta property="og:title" content="vert.x源码浅析之redis集成">
+<meta property="og:url" content="https://www.krivers.fun/posts/4fc0a6f7/index.html">
+<meta property="og:site_name" content="穹柏">
+<meta property="og:description" content="vert.x是一个全异步框架，通过内部的event bus跟event loop做到了处处皆异步...">
+<meta property="og:locale" content="zh_CN">
+<meta property="article:published_time" content="2020-11-10T06:58:19.000Z">
+<meta property="article:modified_time" content="2023-11-29T06:33:26.506Z">
+<meta property="article:author" content="穹柏">
+<meta property="article:tag" content="技术">
+<meta property="article:tag" content="源码">
+<meta property="article:tag" content="浅析">
+<meta property="article:tag" content="vertx">
+<meta name="twitter:card" content="summary">
+
+<link rel="canonical" href="https://www.krivers.fun/posts/4fc0a6f7/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh-CN'
+  };
+</script>
+
+  <title>vert.x源码浅析之redis集成 | 穹柏</title>
+  
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-VYC4XMLJP0"></script>
+    <script data-pjax>
+      if (CONFIG.hostname === location.hostname) {
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){dataLayer.push(arguments);}
+        gtag('js', new Date());
+        gtag('config', 'G-VYC4XMLJP0');
+      }
+    </script>
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+<link rel="alternate" href="/atom.xml" title="穹柏" type="application/atom+xml">
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="切换导航栏">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">穹柏</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+      <p class="site-subtitle" itemprop="description">疏影横斜水清浅，暗香浮动月黄昏</p>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>首页</a>
+
+  </li>
+        <li class="menu-item menu-item-about">
+
+    <a href="/about/" rel="section"><i class="fa fa-user fa-fw"></i>关于</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>标签</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>分类</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>归档</a>
+
+  </li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>搜索
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+        <div class="search-header">
+  <span class="search-icon">
+    <i class="fa fa-search"></i>
+  </span>
+  <div class="search-input-container">
+    <input autocomplete="off" autocapitalize="off"
+           placeholder="搜索..." spellcheck="false"
+           type="search" class="search-input">
+  </div>
+  <span class="popup-btn-close">
+    <i class="fa fa-times-circle"></i>
+  </span>
+</div>
+<div id="search-result">
+  <div id="no-result">
+    <i class="fa fa-spinner fa-pulse fa-5x fa-fw"></i>
+  </div>
+</div>
+
+    </div>
+  </div>
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="https://www.krivers.fun/posts/4fc0a6f7/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.jpg">
+      <meta itemprop="name" content="穹柏">
+      <meta itemprop="description" content="My Blog">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="穹柏">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          vert.x源码浅析之redis集成
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">发表于</span>
+
+              <time title="创建时间：2020-11-10 14:58:19" itemprop="dateCreated datePublished" datetime="2020-11-10T14:58:19+08:00">2020-11-10</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">更新于</span>
+                <time title="修改时间：2023-11-29 14:33:26" itemprop="dateModified" datetime="2023-11-29T14:33:26+08:00">2023-11-29</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">分类于</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/%E6%8A%80%E6%9C%AF/" itemprop="url" rel="index"><span itemprop="name">技术</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="阅读次数" id="busuanzi_container_page_pv" style="display: none;">
+              <span class="post-meta-item-icon">
+                <i class="fa fa-eye"></i>
+              </span>
+              <span class="post-meta-item-text">阅读次数：</span>
+              <span id="busuanzi_value_page_pv"></span>
+            </span><br>
+            <span class="post-meta-item" title="本文字数">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+                <span class="post-meta-item-text">本文字数：</span>
+              <span>2.9k</span>
+            </span>
+            <span class="post-meta-item" title="阅读时长">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+                <span class="post-meta-item-text">阅读时长 &asymp;</span>
+              <span>5 分钟</span>
+            </span>
+            <div class="post-description">vert.x是一个全异步框架，通过内部的event bus跟event loop做到了处处皆异步...</div>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <h1 id="vertx是什么"><a href="#vertx是什么" class="headerlink" title="vertx是什么"></a>vertx是什么</h1><p>vert.x是一个全异步框架，通过内部的event bus跟event loop做到了处处皆异步。关于里面的细节，后面我会出一篇文章详细跟大家探讨…</p>
+<h1 id="为什么要用vertx"><a href="#为什么要用vertx" class="headerlink" title="为什么要用vertx"></a>为什么要用vertx</h1><p>充分利用机器性能，提升应用的吞吐量上限。</p>
+<h1 id="vertx-redis-client是什么"><a href="#vertx-redis-client是什么" class="headerlink" title="vertx-redis-client是什么"></a>vertx-redis-client是什么</h1><p>通俗来讲，vertx-redis提供了一个<code>全异步</code>的可配置的<code>redis客户端</code></p>
+<h1 id="vertx-redis-client有哪些特性"><a href="#vertx-redis-client有哪些特性" class="headerlink" title="vertx-redis-client有哪些特性"></a>vertx-redis-client有哪些特性</h1><p>相对常规的jedis或者Lettuce来说，这里的特性其实就是vertx贯穿全局的特性：异步。当我们调用api发送一条redis指令的时候，可以<code>不用等待</code>redis的响应，只需要绑定一个<code>回调函数</code>，程序就可以继续往下执行。当拿到redis的响应之后，就会触发这个回调。当然，像这种编程方式，需要把<code>业务依赖关系</code>处理得很明确，因为我们必须把依赖这个redis响应的所有处理都移到这个回调函数里去。</p>
+<h1 id="怎么使用vertx-redis-client"><a href="#怎么使用vertx-redis-client" class="headerlink" title="怎么使用vertx-redis-client"></a>怎么使用vertx-redis-client</h1><h2 id="添加vertx-redis-client依赖"><a href="#添加vertx-redis-client依赖" class="headerlink" title="添加vertx-redis-client依赖"></a>添加vertx-redis-client依赖</h2><figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">//gradle</span></span><br><span class="line">compile(<span class="string">&quot;io.vertx:vertx-redis-client:$version&quot;</span>)</span><br><span class="line"><span class="comment">//maven</span></span><br><span class="line">&lt;dependency&gt;</span><br><span class="line">  &lt;groupId&gt;io.vertx&lt;/groupId&gt;</span><br><span class="line">  &lt;artifactId&gt;vertx-redis-client&lt;/artifactId&gt;</span><br><span class="line">  &lt;vertion&gt;&lt;/version&gt;</span><br><span class="line">&lt;/dependency&gt;</span><br></pre></td></tr></table></figure>
+<h2 id="RedisConnection"><a href="#RedisConnection" class="headerlink" title="RedisConnection"></a>RedisConnection</h2><p>RedisConnection是vertx-redis-client里暴露出来可操作redis的最基本的一组api了，使用如下</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><span class="line">Redis</span><br><span class="line">  .createClient(Vertx.vertx(), <span class="string">&quot;redis://ip:port&quot;</span>)</span><br><span class="line">  .connect(onConnect -&gt; &#123;</span><br><span class="line">     <span class="comment">//连接成功</span></span><br><span class="line">     <span class="keyword">if</span> (onConnect.succeeded()) &#123;</span><br><span class="line">         <span class="comment">//获取连接实例</span></span><br><span class="line">         RedisConnection conn = onConnect.result();</span><br><span class="line">         <span class="comment">//创建redis get指令. </span></span><br><span class="line">         Request command = Request.cmd(Command.GET);</span><br><span class="line">         <span class="comment">//添加指令参数aa. 最后到达redis的指令就是get aa</span></span><br><span class="line">         command.arg(<span class="string">&quot;aa&quot;</span>);</span><br><span class="line">         <span class="comment">//发送指令</span></span><br><span class="line">         conn.send(command, resp -&gt; &#123;</span><br><span class="line">             <span class="comment">//执行成功</span></span><br><span class="line">             <span class="keyword">if</span> (resp.succeeded()) &#123;</span><br><span class="line">                 <span class="comment">//拿到指令执行结果</span></span><br><span class="line">                 Response result = resp.result();</span><br><span class="line">             &#125;</span><br><span class="line">         &#125;);</span><br><span class="line">     &#125;</span><br><span class="line"> &#125;);</span><br></pre></td></tr></table></figure>
+<p>这里就谈谈怎么使用吧，其实内部的实现就是通过netty包装的channel跟redis建立起连接，有兴趣的朋友可以点进去看看。</p>
+<h2 id="redisOptions"><a href="#redisOptions" class="headerlink" title="redisOptions"></a>redisOptions</h2><p>在介绍该redisClient各种模式之前，我们需要了解options是什么。<br>简单来说，redisOptions是我们用来定制该redisClient的一种方式，像之前我们通过==Redis.createClient(Vertx.vertx(), “redis://ip:port”)== 这种仅仅提供一个地址的方式就建立起了一个redisClient，但是如果我们想要定制更复杂的redisClient呢？这个时候就需要用到redisOptions了</p>
+<h3 id="各项主要配置的含义"><a href="#各项主要配置的含义" class="headerlink" title="各项主要配置的含义"></a>各项主要配置的含义</h3><p>先大概看下redisOptions都有哪些属性：</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">public</span> <span class="class"><span class="keyword">class</span> <span class="title">RedisOptions</span> </span>&#123;</span><br><span class="line"></span><br><span class="line">  <span class="comment">/**</span></span><br><span class="line"><span class="comment">   * The default redis endpoint = &#123;<span class="doctag">@code</span> redis://localhost:6379&#125;</span></span><br><span class="line"><span class="comment">   */</span></span><br><span class="line">  <span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">final</span> String DEFAULT_ENDPOINT = <span class="string">&quot;redis://localhost:6379&quot;</span>;</span><br><span class="line">  </span><br><span class="line">  <span class="keyword">private</span> RedisClientType type;</span><br><span class="line">  <span class="keyword">private</span> NetClientOptions netClientOptions;</span><br><span class="line">  <span class="keyword">private</span> List&lt;String&gt; endpoints;</span><br><span class="line">  <span class="keyword">private</span> <span class="keyword">int</span> maxWaitingHandlers;</span><br><span class="line">  <span class="keyword">private</span> <span class="keyword">int</span> maxNestedArrays;</span><br><span class="line">  <span class="keyword">private</span> String masterName;</span><br><span class="line">  <span class="keyword">private</span> RedisRole role;</span><br><span class="line">  <span class="keyword">private</span> RedisSlaves slaves;</span><br><span class="line">  <span class="keyword">private</span> String password;</span><br><span class="line"></span><br><span class="line">  <span class="comment">// pool related options</span></span><br><span class="line">  <span class="keyword">private</span> <span class="keyword">int</span> poolCleanerInterval;</span><br><span class="line">  <span class="keyword">private</span> <span class="keyword">int</span> maxPoolSize;</span><br><span class="line">  <span class="keyword">private</span> <span class="keyword">int</span> maxPoolWaiting;</span><br><span class="line">  <span class="keyword">private</span> <span class="keyword">int</span> poolRecycleTimeout;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h4 id="type"><a href="#type" class="headerlink" title="type"></a>type</h4><p>该枚举用于指定redisClient以什么模式去连接server，这里的模式跟redis server的模式一一对应，我们在用的时候也必须注意，server是以什么模式部署的，client就以什么模式去配置。源码如下</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">public</span> <span class="class"><span class="keyword">enum</span> <span class="title">RedisClientType</span> </span>&#123;</span><br><span class="line"></span><br><span class="line">  <span class="comment">/**</span></span><br><span class="line"><span class="comment">   * 默认值，单机模式</span></span><br><span class="line"><span class="comment">   */</span></span><br><span class="line">  STANDALONE,</span><br><span class="line"></span><br><span class="line">  <span class="comment">/**</span></span><br><span class="line"><span class="comment">   * 哨兵</span></span><br><span class="line"><span class="comment">   */</span></span><br><span class="line">  SENTINEL,</span><br><span class="line"></span><br><span class="line">  <span class="comment">/**</span></span><br><span class="line"><span class="comment">   * 集群</span></span><br><span class="line"><span class="comment">   */</span></span><br><span class="line">  CLUSTER</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>这些配置决定了redisClient与server交互的方式，不同的类型会用不同的策略来应对，在我们调用Redis#creatClient的时候就会作出处理，源码如下</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">static</span> Redis <span class="title">createClient</span><span class="params">(Vertx vertx, RedisOptions options)</span> </span>&#123;</span><br><span class="line">    <span class="keyword">switch</span> (options.getType()) &#123;</span><br><span class="line">      <span class="keyword">case</span> STANDALONE:</span><br><span class="line">        <span class="keyword">return</span> <span class="keyword">new</span> RedisClient(vertx, options);</span><br><span class="line">      <span class="keyword">case</span> SENTINEL:</span><br><span class="line">        <span class="keyword">return</span> <span class="keyword">new</span> RedisSentinelClient(vertx, options);</span><br><span class="line">      <span class="keyword">case</span> CLUSTER:</span><br><span class="line">        <span class="keyword">return</span> <span class="keyword">new</span> RedisClusterClient(vertx, options);</span><br><span class="line">      <span class="keyword">default</span>:</span><br><span class="line">        <span class="keyword">throw</span> <span class="keyword">new</span> IllegalStateException(<span class="string">&quot;Unknown Redis Client type: &quot;</span> + options.getType());</span><br><span class="line">    &#125;</span><br><span class="line">  &#125;</span><br></pre></td></tr></table></figure>
+<p>至于不同Client内部是怎么处理的，后面会一一介绍</p>
+<h4 id="masterName"><a href="#masterName" class="headerlink" title="masterName"></a>masterName</h4><p>这个只在Sentinel模式下有用，跟redisServer的redis_sentinel.conf里配置的masterName是一个东西，用来指明连接的是被哨兵监控的哪一个主从集群</p>
+<h4 id="role"><a href="#role" class="headerlink" title="role"></a>role</h4><p>这项配置只用于clientType为Sentinel的情况，主要用来指定当前的客户端到底是跟master连接还是只跟slave连接，如果配置为slave，则通过该客户端发起的所有指令都会被路由到slave节点，这意味着这个client对redisServer的所有操作都是只读的。<br>还有一个sentinel，这个意味着这个client只操作server端的sentinel，不会主动去获取到master或者slave的连接。按我目前看来，这个枚举值其实是给程序内部使用的，除非我们想手动实现跟哨兵的通信以及维护相应主从节点的一个failover情况，那么就可以使用这个配置。核心源码在RedisSentinelClient中，如下所示</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">private</span> <span class="keyword">void</span> <span class="title">createConnectionInternal</span><span class="params">(RedisOptions options, RedisRole role, Handler&lt;AsyncResult&lt;RedisConnection&gt;&gt; onCreate)</span> </span>&#123;</span><br><span class="line">    <span class="keyword">switch</span> (role) &#123;</span><br><span class="line">      <span class="keyword">case</span> SENTINEL:</span><br><span class="line">        resolveClient(<span class="keyword">this</span>::isSentinelOk, options, createAndConnect);</span><br><span class="line">        <span class="keyword">break</span>;</span><br><span class="line"></span><br><span class="line">      <span class="keyword">case</span> MASTER:</span><br><span class="line">        resolveClient(<span class="keyword">this</span>::getMasterFromEndpoint, options, createAndConnect);</span><br><span class="line">        <span class="keyword">break</span>;</span><br><span class="line"></span><br><span class="line">      <span class="keyword">case</span> SLAVE:</span><br><span class="line">        resolveClient(<span class="keyword">this</span>::getSlaveFromEndpoint, options, createAndConnect);</span><br><span class="line">    &#125;</span><br><span class="line">  &#125;</span><br></pre></td></tr></table></figure>
+<p>  这里可以看到，根据不同的role，获取了不同类型的redis连接地址<br>  <figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">private</span> <span class="keyword">void</span> <span class="title">getMasterFromEndpoint</span><span class="params">(String endpoint, RedisOptions options, Handler&lt;AsyncResult&lt;String&gt;&gt; handler)</span> </span>&#123;</span><br><span class="line">  <span class="keyword">final</span> RedisURI uri = <span class="keyword">new</span> RedisURI(endpoint);</span><br><span class="line">  connectionManager.getConnection(context, getSentinelEndpoint(uri), <span class="keyword">null</span>, onCreate -&gt; &#123;</span><br><span class="line">    <span class="keyword">final</span> RedisConnection conn = onCreate.result();</span><br><span class="line">    <span class="keyword">final</span> String masterName = options.getMasterName();</span><br><span class="line">    </span><br><span class="line"> <span class="comment">// 根据masterName从sentinel获取相应主从集群的master节点信息</span></span><br><span class="line">    conn.send(cmd(SENTINEL).arg(<span class="string">&quot;GET-MASTER-ADDR-BY-NAME&quot;</span>).arg(masterName), getMasterAddrByName -&gt; &#123;</span><br><span class="line">      <span class="comment">//bala bala...</span></span><br><span class="line">    &#125;);</span><br><span class="line">  &#125;);</span><br></pre></td></tr></table></figure></p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">private</span> <span class="keyword">void</span> <span class="title">getSlaveFromEndpoint</span><span class="params">(String endpoint, RedisOptions options, Handler&lt;AsyncResult&lt;String&gt;&gt; handler)</span> </span>&#123;</span><br><span class="line">  <span class="keyword">final</span> RedisURI uri = <span class="keyword">new</span> RedisURI(endpoint);</span><br><span class="line">    connectionManager.getConnection(context, getSentinelEndpoint(uri), <span class="keyword">null</span>, onCreate -&gt; &#123;</span><br><span class="line">      </span><br><span class="line">      <span class="keyword">final</span> RedisConnection conn = onCreate.result();</span><br><span class="line">      <span class="keyword">final</span> String masterName = options.getMasterName();</span><br><span class="line">      <span class="comment">// 获取masterName指定主从的slave节点</span></span><br><span class="line">      conn.send(cmd(SENTINEL).arg(<span class="string">&quot;SLAVES&quot;</span>).arg(masterName), sentinelSlaves -&gt; &#123;</span><br><span class="line">        <span class="comment">//...</span></span><br><span class="line">      &#125;);</span><br><span class="line">    &#125;);</span><br><span class="line">  &#125;</span><br></pre></td></tr></table></figure>
+<h4 id="slaves"><a href="#slaves" class="headerlink" title="slaves"></a>slaves</h4><p>这项配置用来指定在集群模式下对server的读操作的行为，源码如下</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">public</span> <span class="class"><span class="keyword">enum</span> <span class="title">RedisSlaves</span> </span>&#123;</span><br><span class="line"></span><br><span class="line">  <span class="comment">/**</span></span><br><span class="line"><span class="comment">   * 读操作只落在master</span></span><br><span class="line"><span class="comment">   */</span></span><br><span class="line">  NEVER,</span><br><span class="line"></span><br><span class="line">  <span class="comment">/**</span></span><br><span class="line"><span class="comment">   * 读操作会随机落在master跟slave</span></span><br><span class="line"><span class="comment">   */</span></span><br><span class="line">  SHARE,</span><br><span class="line"></span><br><span class="line">  <span class="comment">/**</span></span><br><span class="line"><span class="comment">   * 读操作只落在slave上</span></span><br><span class="line"><span class="comment">   */</span></span><br><span class="line">  ALWAYS</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>其核心原理是通过对slave节点执行readonly命令来开启slave的查询功能，因为默认集群模式下slave是不对外提供服务的。核心源码如下</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">private</span> <span class="keyword">void</span> <span class="title">connect</span><span class="params">(List&lt;String&gt; endpoints, <span class="keyword">int</span> index, Handler&lt;AsyncResult&lt;RedisConnection&gt;&gt; onConnect)</span> </span>&#123;</span><br><span class="line">	<span class="comment">//如果RedisSlaves的值不是NEVER,就执行readonly</span></span><br><span class="line">    connectionManager.getConnection(context, endpoints.get(index), RedisSlaves.NEVER != options.getUseSlave() ? cmd(READONLY) : <span class="keyword">null</span>, getConnection -&gt; &#123;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h4 id="poolCleanerInterval"><a href="#poolCleanerInterval" class="headerlink" title="poolCleanerInterval"></a>poolCleanerInterval</h4><p>连接池空闲连接清理间隔，每次扫描时会直接将闲置的连接关闭。<code>-1</code>表示不开启空闲连接清理，核心源码在RedisConnectionManager#start()</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">synchronized</span> <span class="keyword">void</span> <span class="title">start</span><span class="params">()</span> </span>&#123;</span><br><span class="line">    <span class="keyword">long</span> period = options.getPoolCleanerInterval();</span><br><span class="line">    <span class="comment">//延迟period时间后执行checkExpired()进行空闲连接清理</span></span><br><span class="line">    <span class="keyword">this</span>.timerID = period &gt; <span class="number">0</span> ? vertx.setTimer(period, id -&gt; checkExpired(period)) : -<span class="number">1</span>;</span><br><span class="line">  &#125;</span><br></pre></td></tr></table></figure>
+<h4 id="poolRecycleTimeout"><a href="#poolRecycleTimeout" class="headerlink" title="poolRecycleTimeout"></a>poolRecycleTimeout</h4><p>这个是用来控制连接池中连接在执行完命令后还能存活的时间，超过这个时间连接就会被关闭，核心源码在<code>RedisStandaloneConnection</code>。如下</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">public</span> <span class="keyword">boolean</span> <span class="title">isValid</span><span class="params">()</span> </span>&#123;</span><br><span class="line">    <span class="keyword">return</span> expirationTimestamp &gt; <span class="number">0</span> &amp;&amp; System.currentTimeMillis() &lt;= expirationTimestamp;</span><br><span class="line">  &#125;</span><br><span class="line"></span><br><span class="line">  <span class="meta">@Override</span></span><br><span class="line">  <span class="function"><span class="keyword">public</span> <span class="keyword">void</span> <span class="title">close</span><span class="params">()</span> </span>&#123;</span><br><span class="line">    <span class="comment">// recycle this connection from the pool</span></span><br><span class="line">    expirationTimestamp = recycleTimeout &gt; <span class="number">0</span> ? System.currentTimeMillis() + recycleTimeout : <span class="number">0L</span>;</span><br><span class="line">    listener.onRecycle();</span><br><span class="line">  &#125;</span><br></pre></td></tr></table></figure>
+<h4 id="maxPoolSize"><a href="#maxPoolSize" class="headerlink" title="maxPoolSize"></a>maxPoolSize</h4><p>连接池最大大小。<code>只有当等待获取连接的请求数量达到maxPoolWaiting时才会创建新的连接</code>，可以类比<code>ThreadPoolExecutor</code>的<code>maximumPoolSize</code></p>
+<h4 id="maxPoolWaiting"><a href="#maxPoolWaiting" class="headerlink" title="maxPoolWaiting"></a>maxPoolWaiting</h4><p>连接池等待队列大小。当我们通过RedisClient或者RedisApi去操作reids时，如果当前已无空闲的redis连接，那么这个请求就会进入连接池的等待队列中。可以类比<code>ThreadPoolExecutor</code>的<code>workQueue</code></p>
+<h4 id="maxWaitingHandlers"><a href="#maxWaitingHandlers" class="headerlink" title="maxWaitingHandlers"></a>maxWaitingHandlers</h4><p>等待执行的handler数的最大值。当我们发送完redis指令后，一般是需要对这个响应作出处理，这个过程会被包装成一个<code>task</code>添加到<code>eventLoop</code>的<code>waitQueue</code>中，这项配置控制的就是这个<code>queue</code>的<code>size</code></p>
+<h2 id="RedisClient"><a href="#RedisClient" class="headerlink" title="RedisClient"></a>RedisClient</h2><p>redisClient本质是对上述redisConnection的再封装，提供了针对redisServer不同模式的不同处理，分为3种：单机，哨兵以及集群模式。对应到具体的class：<code>RedisClient</code>、<code>RedisSentinelClient</code>、<code>RedisSentinelClient</code><br>接下来来看一下如何配置这些客户端</p>
+<h3 id="STANDALONE"><a href="#STANDALONE" class="headerlink" title="STANDALONE"></a>STANDALONE</h3><p>这个是redisClient默认的一种配置模式，现在我们用前面描述的redisOptions实践一下。</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line">RedisOptions options = <span class="keyword">new</span> RedisOptions();</span><br><span class="line">options.setType(RedisClientType.STANDALONE)</span><br><span class="line">        <span class="comment">//指定server地址</span></span><br><span class="line">        .setConnectionString(<span class="string">&quot;redis://ip:port&quot;</span>)</span><br><span class="line">        .setMaxPoolSize(<span class="number">6</span>)</span><br><span class="line">        .setMaxWaitingHandlers(<span class="number">1024</span>)</span><br><span class="line">        .setPoolRecycleTimeout(<span class="number">15_000</span>)</span><br><span class="line">        .setMaxPoolWaiting(<span class="number">2</span>);</span><br><span class="line"></span><br><span class="line">Redis client = Redis.createClient(Vertx.vertx(), options);</span><br><span class="line"><span class="comment">//创建redis 指令. get</span></span><br><span class="line">Request command = Request.cmd(Command.GET);</span><br><span class="line"><span class="comment">//添加指令参数aa. 最后到达redis的指令就是get aa</span></span><br><span class="line">command.arg(<span class="string">&quot;aa&quot;</span>);</span><br><span class="line"><span class="comment">//发送指令并指定一个匿名handler处理结果</span></span><br><span class="line">client.send(command).onComplete(event -&gt; &#123;</span><br><span class="line">    System.out.println(<span class="string">&quot;the value of redis key &#x27;aa&#x27; is&quot;</span>+event.result().toString());</span><br><span class="line">&#125;);</span><br></pre></td></tr></table></figure>
+<h3 id="SENTINEL"><a href="#SENTINEL" class="headerlink" title="SENTINEL"></a>SENTINEL</h3><p>这里请原谅我秀了一下我那蹩脚的英语水平…</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line">RedisOptions options = <span class="keyword">new</span> RedisOptions();</span><br><span class="line">options.setType(RedisClientType.SENTINEL)</span><br><span class="line">        <span class="comment">//the master name which are monitored by sentinels</span></span><br><span class="line">        .setMasterName(<span class="string">&quot;myMaster&quot;</span>)</span><br><span class="line">        .setRole(RedisRole.MASTER)</span><br><span class="line">        .setMaxPoolSize(<span class="number">6</span>)</span><br><span class="line">        .setMaxWaitingHandlers(<span class="number">1024</span>)</span><br><span class="line">        .setPoolRecycleTimeout(<span class="number">15_000</span>)</span><br><span class="line">        .setMaxPoolWaiting(<span class="number">2</span>);</span><br><span class="line"></span><br><span class="line"><span class="comment">//这里只填哨兵的地址就行了</span></span><br><span class="line"><span class="comment">//程序会自动从哨兵处获取节点信息</span></span><br><span class="line">List&lt;String&gt; sentinels = <span class="keyword">new</span> ArrayList&lt;&gt;();</span><br><span class="line">sentinels.add(<span class="string">&quot;redis://ip:port&quot;</span>);</span><br><span class="line">sentinels.add(<span class="string">&quot;redis://ip:port&quot;</span>);</span><br><span class="line">options.setEndpoints(sentinels);</span><br><span class="line"></span><br><span class="line">...</span><br></pre></td></tr></table></figure>
+<p>这里可以只填一个哨兵地址，由于client不会主动去连接监控同一个master的哨兵节点，所以一旦这个唯一的哨兵挂了，那么server就会处于不可用的状态。</p>
+<h3 id="CLUSTER"><a href="#CLUSTER" class="headerlink" title="CLUSTER"></a>CLUSTER</h3><figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line">   RedisOptions options = <span class="keyword">new</span> RedisOptions();</span><br><span class="line">   options.setType(RedisClientType.CLUSTER)</span><br><span class="line">           .setUseSlave(RedisSlaves.NEVER)</span><br><span class="line">           .setMaxPoolSize(<span class="number">6</span>)</span><br><span class="line">           .setMaxWaitingHandlers(<span class="number">1024</span>)</span><br><span class="line">           .setPoolRecycleTimeout(<span class="number">15_000</span>)</span><br><span class="line">           .setMaxPoolWaiting(<span class="number">20</span>);</span><br><span class="line"><span class="comment">//添加集群节点，越多越好...</span></span><br><span class="line">   List&lt;String&gt; clusters = <span class="keyword">new</span> ArrayList&lt;&gt;();</span><br><span class="line">   sentinels.add(<span class="string">&quot;redis://ip:port&quot;</span>);</span><br><span class="line">   sentinels.add(<span class="string">&quot;redis://ip:port&quot;</span>);</span><br><span class="line">   sentinels.add(<span class="string">&quot;redis://ip:port&quot;</span>);</span><br><span class="line">   options.setEndpoints(clusters);</span><br></pre></td></tr></table></figure>
+<p>这里也需要注意最好将cluster中所有的节点信息给添加进来。虽然连接任意一个节点，client都会通过执行<code>cluster slots</code>获取cluster中所有节点的信息，但是长久保持连接的只有我们在这里设置进去的节点。这意味着一旦我们手动设置的节点挂了，那么server对我们来说就不可用了</p>
+<h2 id="RedisApi"><a href="#RedisApi" class="headerlink" title="RedisApi"></a>RedisApi</h2><p>这个是基于<code>RedisClient</code>的封装，隐藏了<code>Command</code>的复杂细节，提供了一套可以直接调用的api。使用如下：</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">Redis client = Redis.createClient(Vertx.vertx(), options);</span><br><span class="line">RedisAPI api = RedisAPI.api(client);</span><br><span class="line">api.get(<span class="string">&quot;aa&quot;</span>).onComplete(event -&gt; &#123;</span><br><span class="line">    System.out.println(<span class="string">&quot;the value of redis key &#x27;aa&#x27; is&quot;</span> + event.result().toString());</span><br><span class="line">&#125;);</span><br></pre></td></tr></table></figure>
+<h1 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h1><p>全文描述了vertx-client是什么以及其相对某些redis-client所具备的特点。同时深挖了这个客户端各项配置的作用以及不同模式下的表现。<br>总的来说，这篇文章可以帮助大家去建立一个<code>基于vertx的redis客户端</code>，并且对这个客户端能够做到基本的<code>知其然且知其所以然</code>。</p>
+
+    </div>
+
+    
+    
+    
+      
+  <div class="popular-posts-header">推荐内容</div>
+  <ul class="popular-posts">
+    <li class="popular-posts-item">
+      <div class="popular-posts-title"><a href="/posts/f0ea53d7/" rel="bookmark">Spring源码浅析之@Autowired如何解决循环依赖</a></div>
+    </li>
+    <li class="popular-posts-item">
+      <div class="popular-posts-title"><a href="/posts/a1887a80/" rel="bookmark">单元测试之kotlin mockk用法浅析</a></div>
+    </li>
+    <li class="popular-posts-item">
+      <div class="popular-posts-title"><a href="/posts/34050/" rel="bookmark">Mysql之浅析AUTO_INCREMENT</a></div>
+    </li>
+    <li class="popular-posts-item">
+      <div class="popular-posts-title"><a href="/posts/8ccc4590/" rel="bookmark">GC调优之避免临时对象进入老年代思路浅析</a></div>
+    </li>
+    <li class="popular-posts-item">
+      <div class="popular-posts-title"><a href="/posts/7dfe0119/" rel="bookmark">Auto DevOps之gitlab CI/CD</a></div>
+    </li>
+  </ul>
+
+        
+
+<div>
+<ul class="post-copyright">
+  <li class="post-copyright-author">
+    <strong>本文作者： </strong>穹柏
+  </li>
+  <li class="post-copyright-link">
+    <strong>本文链接：</strong>
+    <a href="https://www.krivers.fun/posts/4fc0a6f7/" title="vert.x源码浅析之redis集成">https://www.krivers.fun/posts/4fc0a6f7/</a>
+  </li>
+  <li class="post-copyright-license">
+    <strong>版权声明： </strong>本博客所有文章除特别声明外，均采用 <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" rel="noopener" target="_blank"><i class="fab fa-fw fa-creative-commons"></i>BY-NC-SA</a> 许可协议。转载请注明出处！
+  </li>
+</ul>
+</div>
+
+        
+
+  <div class="followme">
+    <p>欢迎关注我的其它发布渠道</p>
+
+    <div class="social-list">
+
+        <div class="social-item">
+          <a target="_blank" class="social-link" href="/atom.xml">
+            <span class="icon">
+              <i class="fa fa-rss"></i>
+            </span>
+
+            <span class="label">RSS</span>
+          </a>
+        </div>
+    </div>
+  </div>
+
+
+      <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/%E6%8A%80%E6%9C%AF/" rel="tag"># 技术</a>
+              <a href="/tags/%E6%BA%90%E7%A0%81/" rel="tag"># 源码</a>
+              <a href="/tags/%E6%B5%85%E6%9E%90/" rel="tag"># 浅析</a>
+              <a href="/tags/vertx/" rel="tag"># vertx</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/posts/f0ea53d7/" rel="prev" title="Spring源码浅析之@Autowired如何解决循环依赖">
+      <i class="fa fa-chevron-left"></i> Spring源码浅析之@Autowired如何解决循环依赖
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/posts/a1887a80/" rel="next" title="单元测试之kotlin mockk用法浅析">
+      单元测试之kotlin mockk用法浅析 <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          文章目录
+        </li>
+        <li class="sidebar-nav-overview">
+          站点概览
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#vertx%E6%98%AF%E4%BB%80%E4%B9%88"><span class="nav-number">1.</span> <span class="nav-text">vertx是什么</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88%E8%A6%81%E7%94%A8vertx"><span class="nav-number">2.</span> <span class="nav-text">为什么要用vertx</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#vertx-redis-client%E6%98%AF%E4%BB%80%E4%B9%88"><span class="nav-number">3.</span> <span class="nav-text">vertx-redis-client是什么</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#vertx-redis-client%E6%9C%89%E5%93%AA%E4%BA%9B%E7%89%B9%E6%80%A7"><span class="nav-number">4.</span> <span class="nav-text">vertx-redis-client有哪些特性</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E6%80%8E%E4%B9%88%E4%BD%BF%E7%94%A8vertx-redis-client"><span class="nav-number">5.</span> <span class="nav-text">怎么使用vertx-redis-client</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%B7%BB%E5%8A%A0vertx-redis-client%E4%BE%9D%E8%B5%96"><span class="nav-number">5.1.</span> <span class="nav-text">添加vertx-redis-client依赖</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#RedisConnection"><span class="nav-number">5.2.</span> <span class="nav-text">RedisConnection</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#redisOptions"><span class="nav-number">5.3.</span> <span class="nav-text">redisOptions</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%90%84%E9%A1%B9%E4%B8%BB%E8%A6%81%E9%85%8D%E7%BD%AE%E7%9A%84%E5%90%AB%E4%B9%89"><span class="nav-number">5.3.1.</span> <span class="nav-text">各项主要配置的含义</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#type"><span class="nav-number">5.3.1.1.</span> <span class="nav-text">type</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#masterName"><span class="nav-number">5.3.1.2.</span> <span class="nav-text">masterName</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#role"><span class="nav-number">5.3.1.3.</span> <span class="nav-text">role</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#slaves"><span class="nav-number">5.3.1.4.</span> <span class="nav-text">slaves</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#poolCleanerInterval"><span class="nav-number">5.3.1.5.</span> <span class="nav-text">poolCleanerInterval</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#poolRecycleTimeout"><span class="nav-number">5.3.1.6.</span> <span class="nav-text">poolRecycleTimeout</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#maxPoolSize"><span class="nav-number">5.3.1.7.</span> <span class="nav-text">maxPoolSize</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#maxPoolWaiting"><span class="nav-number">5.3.1.8.</span> <span class="nav-text">maxPoolWaiting</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#maxWaitingHandlers"><span class="nav-number">5.3.1.9.</span> <span class="nav-text">maxWaitingHandlers</span></a></li></ol></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#RedisClient"><span class="nav-number">5.4.</span> <span class="nav-text">RedisClient</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#STANDALONE"><span class="nav-number">5.4.1.</span> <span class="nav-text">STANDALONE</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#SENTINEL"><span class="nav-number">5.4.2.</span> <span class="nav-text">SENTINEL</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#CLUSTER"><span class="nav-number">5.4.3.</span> <span class="nav-text">CLUSTER</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#RedisApi"><span class="nav-number">5.5.</span> <span class="nav-text">RedisApi</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E6%80%BB%E7%BB%93"><span class="nav-number">6.</span> <span class="nav-text">总结</span></a></li></ol></div>
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="穹柏"
+      src="/images/avatar.jpg">
+  <p class="site-author-name" itemprop="name">穹柏</p>
+  <div class="site-description" itemprop="description">My Blog</div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">19</span>
+          <span class="site-state-item-name">日志</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/categories/">
+          
+        <span class="site-state-item-count">1</span>
+        <span class="site-state-item-name">分类</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/tags/">
+          
+        <span class="site-state-item-count">17</span>
+        <span class="site-state-item-name">标签</span></a>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author motion-element">
+      <span class="links-of-author-item">
+        <a href="https://github.com/scientificCommunity" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;scientificCommunity" rel="noopener" target="_blank"><i class="fab fa-github fa-fw"></i>GitHub</a>
+      </span>
+      <span class="links-of-author-item">
+        <a href="mailto:rivers.boat.snow@gmail.com" title="E-Mail → mailto:rivers.boat.snow@gmail.com" rel="noopener" target="_blank"><i class="fa fa-envelope fa-fw"></i>E-Mail</a>
+      </span>
+      <span class="links-of-author-item">
+        <a href="https://stackoverflow.com/users/15755323/krivers" title="StackOverflow → https:&#x2F;&#x2F;stackoverflow.com&#x2F;users&#x2F;15755323&#x2F;krivers" rel="noopener" target="_blank"><i class="fab fa-stack-overflow fa-fw"></i>StackOverflow</a>
+      </span>
+  </div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2023</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">穹柏</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+      <span class="post-meta-item-text">站点总字数：</span>
+    <span title="站点总字数">26k</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+      <span class="post-meta-item-text">站点阅读时长 &asymp;</span>
+    <span title="站点阅读时长">47 分钟</span>
+</div>
+
+        
+<div class="busuanzi-count">
+  <script data-pjax async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+    <span class="post-meta-item" id="busuanzi_container_site_uv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="fa fa-user"></i>
+      </span>
+      <span class="site-uv" title="总访客量">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="fa fa-eye"></i>
+      </span>
+      <span class="site-pv" title="总访问量">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="/lib/pjax/pjax.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+  <script>
+var pjax = new Pjax({
+  selectors: [
+    'head title',
+    '#page-configurations',
+    '.content-wrap',
+    '.post-toc-wrap',
+    '.languages',
+    '#pjax'
+  ],
+  switches: {
+    '.post-toc-wrap': Pjax.switches.innerHTML
+  },
+  analytics: false,
+  cacheBust: false,
+  scrollTo : !CONFIG.bookmark.enable
+});
+
+window.addEventListener('pjax:success', () => {
+  document.querySelectorAll('script[data-pjax], script#page-configurations, #pjax script').forEach(element => {
+    var code = element.text || element.textContent || element.innerHTML || '';
+    var parent = element.parentNode;
+    parent.removeChild(element);
+    var script = document.createElement('script');
+    if (element.id) {
+      script.id = element.id;
+    }
+    if (element.className) {
+      script.className = element.className;
+    }
+    if (element.type) {
+      script.type = element.type;
+    }
+    if (element.src) {
+      script.src = element.src;
+      // Force synchronous loading of peripheral JS.
+      script.async = false;
+    }
+    if (element.dataset.pjax !== undefined) {
+      script.dataset.pjax = '';
+    }
+    if (code !== '') {
+      script.appendChild(document.createTextNode(code));
+    }
+    parent.appendChild(script);
+  });
+  NexT.boot.refresh();
+  // Define Motion Sequence & Bootstrap Motion.
+  if (CONFIG.motion.enable) {
+    NexT.motion.integrator
+      .init()
+      .add(NexT.motion.middleWares.subMenu)
+      .add(NexT.motion.middleWares.postList)
+      .bootstrap();
+  }
+  NexT.utils.updateSidebarPosition();
+});
+</script>
+
+
+
+
+  
+
+
+
+
+  
+<script src="/js/local-search.js"></script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+    <div id="pjax">
+  
+
+  
+
+    </div>
+</body>
+</html>

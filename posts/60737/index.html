@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.4.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/avatar.jpg">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/avatar.jpg">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+  <meta name="google-site-verification" content="dAEXqqGBo9pJ5H-Rd3DBK9vd8XTKa7uqPUTqfxdymBo">
+  <meta name="msvalidate.01" content="61A847A9CB3F5D2204C7BB5E36CC2C0E">
+  <meta name="yandex-verification" content="c5b6aa05eb3ca719">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"www.krivers.fun","root":"/","scheme":"Pisces","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":true,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":true,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}},"path":"search.xml"};
+  </script>
+
+  <meta name="description" content="最近新写了一个项目，为了更好的保证项目输出的质量，引入了单元测试覆盖率统计框架Jacoco...">
+<meta property="og:type" content="article">
+<meta property="og:title" content="踩坑日记之Gradle自定义JacocoReport跟Test task">
+<meta property="og:url" content="https://www.krivers.fun/posts/60737/index.html">
+<meta property="og:site_name" content="穹柏">
+<meta property="og:description" content="最近新写了一个项目，为了更好的保证项目输出的质量，引入了单元测试覆盖率统计框架Jacoco...">
+<meta property="og:locale" content="zh_CN">
+<meta property="article:published_time" content="2021-09-18T04:56:33.000Z">
+<meta property="article:modified_time" content="2023-11-29T06:33:26.507Z">
+<meta property="article:author" content="穹柏">
+<meta property="article:tag" content="技术">
+<meta property="article:tag" content="踩坑">
+<meta name="twitter:card" content="summary">
+
+<link rel="canonical" href="https://www.krivers.fun/posts/60737/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh-CN'
+  };
+</script>
+
+  <title>踩坑日记之Gradle自定义JacocoReport跟Test task | 穹柏</title>
+  
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-VYC4XMLJP0"></script>
+    <script data-pjax>
+      if (CONFIG.hostname === location.hostname) {
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){dataLayer.push(arguments);}
+        gtag('js', new Date());
+        gtag('config', 'G-VYC4XMLJP0');
+      }
+    </script>
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+<link rel="alternate" href="/atom.xml" title="穹柏" type="application/atom+xml">
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="切换导航栏">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">穹柏</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+      <p class="site-subtitle" itemprop="description">疏影横斜水清浅，暗香浮动月黄昏</p>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>首页</a>
+
+  </li>
+        <li class="menu-item menu-item-about">
+
+    <a href="/about/" rel="section"><i class="fa fa-user fa-fw"></i>关于</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>标签</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>分类</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>归档</a>
+
+  </li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>搜索
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+        <div class="search-header">
+  <span class="search-icon">
+    <i class="fa fa-search"></i>
+  </span>
+  <div class="search-input-container">
+    <input autocomplete="off" autocapitalize="off"
+           placeholder="搜索..." spellcheck="false"
+           type="search" class="search-input">
+  </div>
+  <span class="popup-btn-close">
+    <i class="fa fa-times-circle"></i>
+  </span>
+</div>
+<div id="search-result">
+  <div id="no-result">
+    <i class="fa fa-spinner fa-pulse fa-5x fa-fw"></i>
+  </div>
+</div>
+
+    </div>
+  </div>
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="https://www.krivers.fun/posts/60737/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.jpg">
+      <meta itemprop="name" content="穹柏">
+      <meta itemprop="description" content="My Blog">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="穹柏">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          踩坑日记之Gradle自定义JacocoReport跟Test task
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">发表于</span>
+
+              <time title="创建时间：2021-09-18 12:56:33" itemprop="dateCreated datePublished" datetime="2021-09-18T12:56:33+08:00">2021-09-18</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">更新于</span>
+                <time title="修改时间：2023-11-29 14:33:26" itemprop="dateModified" datetime="2023-11-29T14:33:26+08:00">2023-11-29</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">分类于</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/%E6%8A%80%E6%9C%AF/" itemprop="url" rel="index"><span itemprop="name">技术</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="阅读次数" id="busuanzi_container_page_pv" style="display: none;">
+              <span class="post-meta-item-icon">
+                <i class="fa fa-eye"></i>
+              </span>
+              <span class="post-meta-item-text">阅读次数：</span>
+              <span id="busuanzi_value_page_pv"></span>
+            </span><br>
+            <span class="post-meta-item" title="本文字数">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+                <span class="post-meta-item-text">本文字数：</span>
+              <span>2.5k</span>
+            </span>
+            <span class="post-meta-item" title="阅读时长">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+                <span class="post-meta-item-text">阅读时长 &asymp;</span>
+              <span>5 分钟</span>
+            </span>
+            <div class="post-description">最近新写了一个项目，为了更好的保证项目输出的质量，引入了单元测试覆盖率统计框架Jacoco...</div>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <h1 id="起因"><a href="#起因" class="headerlink" title="起因"></a>起因</h1><p>最近新写了一个项目，为了更好的保证项目输出的质量，引入了单元测试覆盖率统计框架<code>Jacoco</code>。由于gradle官网上的案例只有几个默认的<code>task(test、JacocoTestReport等)</code>的设置，而我希望能够额外为不同的层提供单独的<code>test</code>，也就发生了接下来这些有趣的事儿。</p>
+<h1 id="1-为什么JacocoTestReport总是被SKIPPED"><a href="#1-为什么JacocoTestReport总是被SKIPPED" class="headerlink" title="1. 为什么JacocoTestReport总是被SKIPPED"></a>1. 为什么<code>JacocoTestReport</code>总是被SKIPPED</h1><p>首先，我写了一个自定义的test。并且通过将<code>finalizedBy</code>指定为<code>JacocoTestReport</code>来让test执行完毕后自动执行<code>JacocoTestReport</code>。自定义test以及<code>JacocoTestReport</code> 如下：</p>
+<figure class="highlight groovy"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">//自定义test</span></span><br><span class="line">task serviceTest(<span class="attr">type:</span> Test) &#123;</span><br><span class="line">    useTestNG()</span><br><span class="line">    useJUnitPlatform()</span><br><span class="line"></span><br><span class="line">	finalizedBy jacocoTestReport</span><br><span class="line"></span><br><span class="line">    jacoco &#123;</span><br><span class="line">        enabled = <span class="literal">true</span></span><br><span class="line">        <span class="comment">//指定原始数据文件位置</span></span><br><span class="line">        destinationFile = layout.buildDirectory.file(<span class="string">&quot;jacoco/$&#123;taskName&#125;.exec&quot;</span>).get().asFile</span><br><span class="line">        includes = [<span class="string">&#x27;xxxservice&#x27;</span>]</span><br><span class="line">        excludeClassLoaders = []</span><br><span class="line">        includeNoLocationClasses = <span class="literal">false</span></span><br><span class="line">        sessionId = <span class="string">&quot;&lt;auto-generated value&gt;&quot;</span></span><br><span class="line">        output = JacocoTaskExtension.Output.FILE</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">jacocoTestReport &#123;</span><br><span class="line">    <span class="comment">// tests are required to run before generating the report</span></span><br><span class="line">    dependsOn serviceTest</span><br><span class="line">		</span><br><span class="line">	<span class="comment">//指定覆盖率统计数据文件。</span></span><br><span class="line">	executionData(layout.buildDirectory.file(<span class="string">&quot;jacoco/$&#123;serviceTest.name&#125;.exec&quot;</span>).get().asFile)</span><br><span class="line"></span><br><span class="line">    afterEvaluate &#123;</span><br><span class="line">        classDirectories.setFrom(files(classDirectories.files.collect &#123;</span><br><span class="line">            fileTree(<span class="attr">dir:</span> it, <span class="attr">include:</span> [<span class="string">&#x27;xxxservice&#x27;</span>])</span><br><span class="line">        &#125;))</span><br><span class="line">    &#125;</span><br><span class="line">    reports &#123;</span><br><span class="line">        xml.required = <span class="literal">false</span></span><br><span class="line">        csv.required = <span class="literal">false</span></span><br><span class="line">        html.outputLocation = layout.buildDirectory.dir(<span class="string">&#x27;jacocoReport&#x27;</span>)</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>看起来似乎没啥问题，该做的都做了。但是执行的时候程序却跳过了jacocoTestReport。当时特别纳闷，就去网上提了个<a target="_blank" rel="noopener" href="https://stackoverflow.com/questions/69164311/jacocotestreport-always-skipped/69177867#69177867">问题</a>。最后gradle官方的工作人员给了答复，大概意思是<code>executionData</code>对应的文件不存在，在<code>jacocoTestReport</code>里加上<code>onlyIf = &#123;true&#125;</code> 可以保证<code>jacocoTestReport</code>会执行，并且执行最终会报出test.exec文件不存在的错误。ok，有方向了，那就一个一个来分析。</p>
+<h1 id="2-task里的onlyIf"><a href="#2-task里的onlyIf" class="headerlink" title="2. task里的onlyIf"></a>2. <code>task</code>里的<code>onlyIf</code></h1><p>事实上，<code>onlyIf</code>决定了<code>task</code>是否被执行。同时，<code>onlyIf</code>可以设置多个规则判断，如果所有的规则判断都返回为<code>true</code>，才会执行<code>task</code>。否则，跳过<code>task</code>。</p>
+<h2 id="2-1-SkipOnlyIfTaskExecuter"><a href="#2-1-SkipOnlyIfTaskExecuter" class="headerlink" title="2.1 SkipOnlyIfTaskExecuter"></a>2.1 <code>SkipOnlyIfTaskExecuter</code></h2><p>让我们进入<code>SkipOnlyIfTaskExecuter</code>一探究竟：</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">public</span> <span class="class"><span class="keyword">class</span> <span class="title">SkipOnlyIfTaskExecuter</span> <span class="keyword">implements</span> <span class="title">TaskExecuter</span> </span>&#123;</span><br><span class="line">	<span class="meta">@Override</span></span><br><span class="line">    <span class="function"><span class="keyword">public</span> TaskExecuterResult <span class="title">execute</span><span class="params">(TaskInternal task, TaskStateInternal state, TaskExecutionContext context)</span> </span>&#123;</span><br><span class="line">        <span class="keyword">boolean</span> skip = !task.getOnlyIf().isSatisfiedBy(task);</span><br><span class="line">				</span><br><span class="line">		<span class="comment">//跳过task</span></span><br><span class="line">        <span class="keyword">if</span> (skip) &#123;</span><br><span class="line">            <span class="keyword">return</span> TaskExecuterResult.WITHOUT_OUTPUTS;</span><br><span class="line">        &#125;</span><br><span class="line">				</span><br><span class="line">		<span class="comment">//执行task</span></span><br><span class="line">        <span class="keyword">return</span> executer.execute(task, state, context);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">	<span class="comment">//遍历所有规则</span></span><br><span class="line">	<span class="function"><span class="keyword">public</span> <span class="keyword">boolean</span> <span class="title">isSatisfiedBy</span><span class="params">(T object)</span> </span>&#123;</span><br><span class="line">        Spec&lt;? <span class="keyword">super</span> T&gt;[] specs = getSpecsArray();</span><br><span class="line">        <span class="keyword">for</span> (Spec&lt;? <span class="keyword">super</span> T&gt; spec : specs) &#123;</span><br><span class="line">            <span class="keyword">if</span> (!spec.isSatisfiedBy(object)) &#123;</span><br><span class="line">								<span class="comment">//只要有一个规则不通过，则返回false</span></span><br><span class="line">                <span class="keyword">return</span> <span class="keyword">false</span>;</span><br><span class="line">            &#125;</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="keyword">return</span> <span class="keyword">true</span>;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h2 id="2-2-onlyIf用法"><a href="#2-2-onlyIf用法" class="headerlink" title="2.2 onlyIf用法"></a>2.2 onlyIf用法</h2><p>那么，我么怎么使用<code>onlyIf</code>呢？</p>
+<h3 id="2-2-1-自定义规则作为唯一判断条件"><a href="#2-2-1-自定义规则作为唯一判断条件" class="headerlink" title="2.2.1 自定义规则作为唯一判断条件"></a>2.2.1 自定义规则作为唯一判断条件</h3><p>这里用<code>=</code>即可。</p>
+<figure class="highlight groovy"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">task foo&#123;</span><br><span class="line">	onlyIf = &#123;<span class="literal">true</span>&#125;</span><br><span class="line">&#125;</span><br><span class="line"><span class="comment">//或者</span></span><br><span class="line">foo.onlyIf = &#123;<span class="literal">true</span>&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这里我们可以从gradle源码<code>AbstractTask#setOnlyIf</code> 看出来</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">public</span> <span class="keyword">void</span> <span class="title">setOnlyIf</span><span class="params">(<span class="keyword">final</span> Closure onlyIfClosure)</span> </span>&#123;</span><br><span class="line">       taskMutator.mutate(<span class="string">&quot;Task.setOnlyIf(Closure)&quot;</span>, <span class="keyword">new</span> Runnable() &#123;</span><br><span class="line">           <span class="meta">@Override</span></span><br><span class="line">           <span class="function"><span class="keyword">public</span> <span class="keyword">void</span> <span class="title">run</span><span class="params">()</span> </span>&#123;</span><br><span class="line">			<span class="comment">//设置onlyIfClosure并覆盖原有的onlyIfSpec</span></span><br><span class="line">               onlyIfSpec = createNewOnlyIfSpec().and(onlyIfClosure);</span><br><span class="line">           &#125;</span><br><span class="line">       &#125;);</span><br><span class="line">   &#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">//创建一个新的默认返回为true的element</span></span><br><span class="line"><span class="function"><span class="keyword">private</span> AndSpec&lt;Task&gt; <span class="title">createNewOnlyIfSpec</span><span class="params">()</span> </span>&#123;</span><br><span class="line">       <span class="keyword">return</span> <span class="keyword">new</span> AndSpec&lt;Task&gt;(<span class="keyword">new</span> Spec&lt;Task&gt;() &#123;</span><br><span class="line">           <span class="meta">@Override</span></span><br><span class="line">           <span class="function"><span class="keyword">public</span> <span class="keyword">boolean</span> <span class="title">isSatisfiedBy</span><span class="params">(Task element)</span> </span>&#123;</span><br><span class="line">			<span class="comment">//调用方: task.isSatisfiedBy(task)</span></span><br><span class="line">               <span class="keyword">return</span> element == AbstractTask.<span class="keyword">this</span> &amp;&amp; enabled;</span><br><span class="line">           &#125;</span><br><span class="line">       &#125;);</span><br><span class="line">   &#125;</span><br></pre></td></tr></table></figure>
+
+<h3 id="2-2-2-自定义规则作为条件判断的一部分"><a href="#2-2-2-自定义规则作为条件判断的一部分" class="headerlink" title="2.2.2 自定义规则作为条件判断的一部分"></a>2.2.2 自定义规则作为条件判断的一部分</h3><p>去掉<code>=</code>即可</p>
+<figure class="highlight groovy"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">task foo&#123;</span><br><span class="line">	onlyIf &#123;<span class="literal">true</span>&#125;</span><br><span class="line">&#125;</span><br><span class="line"><span class="comment">//或者</span></span><br><span class="line">foo.onlyIf &#123;<span class="literal">true</span>&#125;</span><br></pre></td></tr></table></figure>
+
+<p>源码部分：</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">public</span> <span class="keyword">void</span> <span class="title">onlyIf</span><span class="params">(<span class="keyword">final</span> Closure onlyIfClosure)</span> </span>&#123;</span><br><span class="line">       taskMutator.mutate(<span class="string">&quot;Task.onlyIf(Closure)&quot;</span>, <span class="keyword">new</span> Runnable() &#123;</span><br><span class="line">           <span class="meta">@Override</span></span><br><span class="line">           <span class="function"><span class="keyword">public</span> <span class="keyword">void</span> <span class="title">run</span><span class="params">()</span> </span>&#123;</span><br><span class="line">			<span class="comment">//插入</span></span><br><span class="line">               onlyIfSpec = onlyIfSpec.and(onlyIfClosure);</span><br><span class="line">           &#125;</span><br><span class="line">       &#125;);</span><br><span class="line">   &#125;</span><br></pre></td></tr></table></figure>
+
+<p>这种方式可以方便我们定义多个<code>onlyIf</code>块，同时也可以保证不会覆盖系统默认的<code>onlyIf</code>。接下来我们来聊聊<code>jacocoTestReport</code>预置的<code>onlyIf</code></p>
+<h1 id="3-jacocoTestReport的onlyIf为什么”默认”是false"><a href="#3-jacocoTestReport的onlyIf为什么”默认”是false" class="headerlink" title="3. jacocoTestReport的onlyIf为什么”默认”是false"></a>3. <code>jacocoTestReport</code>的<code>onlyIf</code>为什么”默认”是<code>false</code></h1><p>从上面的分析可知<code>jacocoTestReport</code>会被跳过显然是<code>isSatisfiedBy</code>返回了false。而正常情况通过<code>createNewOnlyIfSpec()</code>初始化的<code>spec</code>其<code>isSatisfiedBy</code>返回的必然是true。所以，肯定是什么地方添加了额外的<code>spec</code>。我们先看看<code>JacocoReport</code>这种类型的<code>Task</code>是如何初始化的：</p>
+<figure class="highlight groovy"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">/**</span></span><br><span class="line"><span class="comment"> *  JacocoReport extends JacocoReportBase</span></span><br><span class="line"><span class="comment"> *  JacocoReportBase extends AbstractTask</span></span><br><span class="line"><span class="comment"> */</span></span><br><span class="line"><span class="keyword">public</span> <span class="keyword">abstract</span> <span class="class"><span class="keyword">class</span> <span class="title">JacocoReportBase</span> <span class="keyword">extends</span> <span class="title">JacocoBase</span> &#123;</span></span><br><span class="line"></span><br><span class="line">	<span class="keyword">public</span> JacocoReportBase() &#123;</span><br><span class="line">		<span class="comment">//添加spec</span></span><br><span class="line">        onlyIf(<span class="keyword">new</span> Spec&lt;Task&gt;() &#123;</span><br><span class="line">            <span class="meta">@Override</span></span><br><span class="line">            <span class="keyword">public</span> <span class="keyword">boolean</span> isSatisfiedBy(Task element) &#123;</span><br><span class="line">                <span class="keyword">return</span> Iterables.any(getExecutionData(), <span class="keyword">new</span> Predicate&lt;File&gt;() &#123;</span><br><span class="line">                    <span class="meta">@Override</span></span><br><span class="line">                    <span class="keyword">public</span> <span class="keyword">boolean</span> apply(File file) &#123;</span><br><span class="line">                    	<span class="comment">//返回文件是否存在</span></span><br><span class="line">                        <span class="keyword">return</span> file.exists();</span><br><span class="line">                    &#125;</span><br><span class="line">                &#125;);</span><br><span class="line">            &#125;</span><br><span class="line">        &#125;);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>可以看到，<code>JacocoReport</code>在初始化时会添加一个验证规则，如果<code>getExecutionData()</code>对应的文件都存在，则返回<code>true</code>，否则返回<code>false</code> 。那么，<code>onlyIf</code>“默认”为<code>false</code>，显然是<code>getExecutionData()</code>返回的文件路径中有的文件不存在。接下来我们研究为什么会有文件不存在的问题。</p>
+<h1 id="4-jacocoTestReport的executionData为什么会默认包含”test-exec”"><a href="#4-jacocoTestReport的executionData为什么会默认包含”test-exec”" class="headerlink" title="4. jacocoTestReport的executionData为什么会默认包含”test.exec”"></a>4. <code>jacocoTestReport</code>的<code>executionData</code>为什么会默认包含”test.exec”</h1><p>经过上述分析，我们知道只要为task设置<code>onlyIf=&#123;true&#125;</code>之后，task就必然会执行。通过添加onlyIf={true}，<code>jacocoTestReport</code>开始运行。这是突然又得到一个错误：</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">Unable to read execution data file /xxx/test.exec</span><br></pre></td></tr></table></figure>
+
+<p>很奇怪，明明我们设置的<code>executionData</code>是<code>serviceTest.exec</code>，为什么<code>jacocoTestReport</code>会去查找<code>test.exec</code>呢？显然，这又是被预置的行为。所以，我们先来看看<code>jacocoTestReport</code>这个<code>Task</code>是在哪里创建出来的：</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">public</span> <span class="class"><span class="keyword">class</span> <span class="title">JavaPlugin</span> <span class="keyword">implements</span> <span class="title">Plugin</span>&lt;<span class="title">Project</span>&gt; </span>&#123;</span><br><span class="line">		<span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">final</span> String TEST_TASK_NAME = <span class="string">&quot;test&quot;</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">public</span> <span class="class"><span class="keyword">class</span> <span class="title">JacocoPlugin</span> <span class="keyword">implements</span> <span class="title">Plugin</span>&lt;<span class="title">Project</span>&gt; </span>&#123;</span><br><span class="line"></span><br><span class="line">	<span class="function"><span class="keyword">private</span> <span class="keyword">void</span> <span class="title">addDefaultReportAndCoverageVerificationTasks</span><span class="params">(<span class="keyword">final</span> JacocoPluginExtension extension)</span> </span>&#123;</span><br><span class="line">        project.getPlugins().withType(JavaPlugin.class, javaPlugin -&gt; &#123;</span><br><span class="line"></span><br><span class="line">			<span class="comment">//获取test Task</span></span><br><span class="line">            TaskProvider&lt;Task&gt; testTaskProvider = project.getTasks().named(JavaPlugin.TEST_TASK_NAME);</span><br><span class="line">			<span class="comment">//初始化jacocoTestReport Task</span></span><br><span class="line">            addDefaultReportTask(extension, testTaskProvider);</span><br><span class="line">        &#125;);</span><br><span class="line">    &#125;</span><br><span class="line">		</span><br><span class="line">	<span class="function"><span class="keyword">private</span> <span class="keyword">void</span> <span class="title">addDefaultReportTask</span><span class="params">(<span class="keyword">final</span> JacocoPluginExtension extension, <span class="keyword">final</span> TaskProvider&lt;Task&gt; testTaskProvider)</span> </span>&#123;</span><br><span class="line">		<span class="comment">//testTaskName是常量test</span></span><br><span class="line">        <span class="keyword">final</span> String testTaskName = testTaskProvider.getName();</span><br><span class="line">		<span class="comment">//注册jacocoTestReport Task</span></span><br><span class="line">        project.getTasks().register(</span><br><span class="line">            <span class="string">&quot;jacoco&quot;</span> + StringUtils.capitalize(testTaskName) + <span class="string">&quot;Report&quot;</span>,</span><br><span class="line">            JacocoReport.class,</span><br><span class="line">            reportTask -&gt; &#123;</span><br><span class="line">				<span class="comment">//定义该Task的默认配置项</span></span><br><span class="line">				...</span><br><span class="line">				<span class="comment">//设置executionData为test里定义的destinationFile</span></span><br><span class="line">                reportTask.executionData(testTaskProvider.get());</span><br><span class="line">                ...</span><br><span class="line">            &#125;);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">public</span> <span class="keyword">abstract</span> <span class="class"><span class="keyword">class</span> <span class="title">JacocoReportBase</span> <span class="keyword">extends</span> <span class="title">JacocoBase</span> </span>&#123;</span><br><span class="line"></span><br><span class="line">	<span class="function"><span class="keyword">public</span> <span class="keyword">void</span> <span class="title">executionData</span><span class="params">(Task... tasks)</span> </span>&#123;</span><br><span class="line">        <span class="keyword">for</span> (Task task : tasks) &#123;</span><br><span class="line">			<span class="comment">//拿到传入task里定义的jacoco extension,也就是jacoco&#123;&#125;定义的内容</span></span><br><span class="line">            <span class="keyword">final</span> JacocoTaskExtension extension = task.getExtensions().findByType(JacocoTaskExtension.class);</span><br><span class="line">            <span class="keyword">if</span> (extension != <span class="keyword">null</span>) &#123;</span><br><span class="line">                executionData(<span class="keyword">new</span> Callable&lt;File&gt;() &#123;</span><br><span class="line">                    <span class="meta">@Override</span></span><br><span class="line">                    <span class="function"><span class="keyword">public</span> File <span class="title">call</span><span class="params">()</span> </span>&#123;</span><br><span class="line">						<span class="comment">//设置executionData为task里定义的destinationFile</span></span><br><span class="line">                        <span class="keyword">return</span> extension.getDestinationFile();</span><br><span class="line">                    &#125;</span><br><span class="line">                &#125;);</span><br><span class="line">                mustRunAfter(task);</span><br><span class="line">            &#125;</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>可以看到，<code>JacocoPlugin</code>在初始化时会注册一个类型为<code>JacocoReport</code>而名称为<code>jacocoTestReport</code>的<code>Task</code>，这个<code>Task</code>的<code>executionData</code>默认设置为test Task的<code>jacoco extension</code>中定义的<code>destinationFile</code>。而上文中的<code>test</code>的<code>jacoco extension</code>里定义的<code>destinationFile</code>正好是<code>layout.buildDirectory.file(&quot;jacoco/$&#123;taskName&#125;.exec&quot;).get().asFile</code>。所以到这里其实也就真相大白了。</p>
+<p>事实上，类型为<code>Test</code>的<code>Task</code>的<code>jacoco extension</code>的<code>destinationFile</code>默认值就是<code>layout.getBuildDirectory().file(&quot;jacoco/&quot; + taskName + &quot;.exec&quot;).map(RegularFile::getAsFile)</code>。所以，如果我们没有定义这个值，也会报出同样的错误。源码部分如下：</p>
+<figure class="highlight groovy"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">public</span> <span class="class"><span class="keyword">class</span> <span class="title">JacocoPlugin</span> <span class="keyword">implements</span> <span class="title">Plugin</span>&lt;<span class="title">Project</span>&gt; &#123;</span></span><br><span class="line">	<span class="keyword">public</span> <span class="keyword">void</span> apply(Project project) &#123;</span><br><span class="line">        JacocoPluginExtension extension = project.getExtensions().create(PLUGIN_EXTENSION_NAME, JacocoPluginExtension.<span class="keyword">class</span>, project, agent);</span><br><span class="line">        <span class="comment">//为test设置默认jacoco extension</span></span><br><span class="line">        applyToDefaultTasks(extension);</span><br><span class="line">        <span class="comment">//初始化默认jacocoTestReport</span></span><br><span class="line">        addDefaultReportAndCoverageVerificationTasks(extension);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">private</span> <span class="keyword">void</span> applyToDefaultTasks(<span class="keyword">final</span> JacocoPluginExtension extension) &#123;</span><br><span class="line">		<span class="comment">//拿到所有test Task并配置jacoco extension</span></span><br><span class="line">        project.getTasks().withType(Test.<span class="keyword">class</span>).configureEach(<span class="attr">extension:</span>:applyTo);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">public</span> <span class="class"><span class="keyword">class</span> <span class="title">JacocoPluginExtension</span> &#123;</span></span><br><span class="line">	<span class="keyword">public</span> &lt;T <span class="keyword">extends</span> Task &amp; JavaForkOptions&gt; <span class="keyword">void</span> applyTo(<span class="keyword">final</span> T task) &#123;</span><br><span class="line">        <span class="keyword">final</span> String taskName = task.getName();</span><br><span class="line">        <span class="keyword">final</span> JacocoTaskExtension extension = task.getExtensions().create(TASK_EXTENSION_NAME, JacocoTaskExtension.<span class="keyword">class</span>, objects, agent, task);</span><br><span class="line">		<span class="comment">//设置文件名为$&#123;taskName&#125;.exec。test Task对应的就是test.exec</span></span><br><span class="line">        extension.setDestinationFile(layout.getBuildDirectory().file(<span class="string">&quot;jacoco/&quot;</span> + taskName + <span class="string">&quot;.exec&quot;</span>).map(<span class="attr">RegularFile:</span>:getAsFile));</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h1 id="5-怎么实现最初的目标"><a href="#5-怎么实现最初的目标" class="headerlink" title="5. 怎么实现最初的目标"></a>5. 怎么实现最初的目标</h1><p>既然我们知道了<code>jacocoTestReport</code>里预设了<code>executionData</code>，那么要实现最初目标，我们只需要在执行<code>task</code>时把它清空并重新设置，或者自定义一个干净的<code>JacocoReport</code>即可。</p>
+<h2 id="5-1-清空并重新设置"><a href="#5-1-清空并重新设置" class="headerlink" title="5.1 清空并重新设置"></a>5.1 清空并重新设置</h2><figure class="highlight groovy"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><span class="line">jacocoTestReport &#123;</span><br><span class="line">    <span class="comment">// tests are required to run before generating the report</span></span><br><span class="line">    dependsOn serviceTest</span><br><span class="line">		<span class="comment">//清空预设的executionData</span></span><br><span class="line">		((DefaultConfigurableFileCollection) executionData).filesWrapper.clear();</span><br><span class="line">		<span class="comment">//指定覆盖率统计数据文件。</span></span><br><span class="line">		executionData(layout.buildDirectory.file(<span class="string">&quot;jacoco/$&#123;serviceTest.name&#125;.exec&quot;</span>).get().asFile)</span><br><span class="line"></span><br><span class="line">    afterEvaluate &#123;</span><br><span class="line">        classDirectories.setFrom(files(classDirectories.files.collect &#123;</span><br><span class="line">            fileTree(<span class="attr">dir:</span> it, <span class="attr">include:</span> [<span class="string">&#x27;xxxservice&#x27;</span>])</span><br><span class="line">        &#125;))</span><br><span class="line">    &#125;</span><br><span class="line">    reports &#123;</span><br><span class="line">        xml.required = <span class="literal">false</span></span><br><span class="line">        csv.required = <span class="literal">false</span></span><br><span class="line">        html.outputLocation = layout.buildDirectory.dir(<span class="string">&#x27;jacocoReport&#x27;</span>)</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h2 id="5-2-自定义一个干净的JacocoReport"><a href="#5-2-自定义一个干净的JacocoReport" class="headerlink" title="5.2 自定义一个干净的JacocoReport"></a>5.2 自定义一个干净的<code>JacocoReport</code></h2><figure class="highlight groovy"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><span class="line">task jacocoServiceTestReport(<span class="attr">type:</span> JacocoReport) &#123;</span><br><span class="line">    <span class="comment">// tests are required to run before generating the report</span></span><br><span class="line">    dependsOn serviceTest</span><br><span class="line"></span><br><span class="line">    <span class="comment">//自定义的不会初始化源码目录，需要手动指定</span></span><br><span class="line">    sourceSets sourceSets.main</span><br><span class="line"></span><br><span class="line">    executionData(layout.buildDirectory.file(<span class="string">&quot;jacoco/$&#123;serviceTest.name&#125;.exec&quot;</span>).get().asFile)</span><br><span class="line"></span><br><span class="line">    afterEvaluate &#123;</span><br><span class="line">        classDirectories.setFrom(files(classDirectories.files.collect &#123;</span><br><span class="line">            fileTree(<span class="attr">dir:</span> it, <span class="attr">include:</span> project.ext.serviceSources)</span><br><span class="line">        &#125;))</span><br><span class="line">    &#125;</span><br><span class="line">    reports &#123;</span><br><span class="line">        xml.required = <span class="literal">false</span></span><br><span class="line">        csv.required = <span class="literal">false</span></span><br><span class="line">        html.outputLocation = layout.buildDirectory.dir(project.ext.reportDir <span class="keyword">as</span> String)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    onlyIf = &#123; <span class="literal">true</span> &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h1 id="一些唠叨-没什么营养，可跳过"><a href="#一些唠叨-没什么营养，可跳过" class="headerlink" title="一些唠叨(没什么营养，可跳过)"></a>一些唠叨(没什么营养，可跳过)</h1><p>当时碰到这个问题，没有头绪。就跑到<code>StackOverFlow</code>上瞎逛过一圈。其中有一个<a target="_blank" rel="noopener" href="https://stackoverflow.com/questions/61070848/configure-jacocotestreport-to-read-multiple-exec-files-as-input/69210870#69210870">相同的问题</a>，但下面的解答不对。最后还是我解决问题后跑到下面给了解答(作为一个<code>gradle</code>菜鸟，能帮助到他人，很开心😃!)。</p>
+<h1 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h1><p>因为对<code>gradle</code>跟<code>jacoco</code>不怎么熟，当时看到唯一的提示信息：<code>jacocoTestReport SKIPPED</code>我是一脸懵逼的。好在当时从<a target="_blank" rel="noopener" href="https://stackoverflow.com/questions/39610659/eclipse-java-gradle-is-skipping-jacocotestreport">stackOverFlow</a>以及<a target="_blank" rel="noopener" href="https://github.com/gradle/gradle/issues/18271">官方</a>那里得到了一个切入点：<code>onlyIf=&#123;true&#125;</code>。让问题最终得以解决。</p>
+<p>另一方面，我觉得官方在这一块的sample略显简陋，这些默认行为至少应该提一下，否则很容易让人摸不着头脑。所以我翻文档终究没有翻出解决方案(如果有哪位朋友发现官方文档有过这方面的描述，欢迎指出👏)。</p>
+<h1 id="github"><a href="#github" class="headerlink" title="github"></a><a target="_blank" rel="noopener" href="https://github.com/scientificCommunity/blog-sample/blob/feature/unit-test-sample/unit-test-sample/unitTest.gradle">github</a></h1>
+    </div>
+
+    
+    
+    
+      
+  <div class="popular-posts-header">推荐内容</div>
+  <ul class="popular-posts">
+    <li class="popular-posts-item">
+      <div class="popular-posts-title"><a href="/posts/48796/" rel="bookmark">单元测试之浅析Mockito mock Kotlin Object类方法</a></div>
+    </li>
+    <li class="popular-posts-item">
+      <div class="popular-posts-title"><a href="/posts/34050/" rel="bookmark">Mysql之浅析AUTO_INCREMENT</a></div>
+    </li>
+    <li class="popular-posts-item">
+      <div class="popular-posts-title"><a href="/posts/8ccc4590/" rel="bookmark">GC调优之避免临时对象进入老年代思路浅析</a></div>
+    </li>
+    <li class="popular-posts-item">
+      <div class="popular-posts-title"><a href="/posts/7dfe0119/" rel="bookmark">Auto DevOps之gitlab CI/CD</a></div>
+    </li>
+    <li class="popular-posts-item">
+      <div class="popular-posts-title"><a href="/posts/f0ea53d7/" rel="bookmark">Spring源码浅析之@Autowired如何解决循环依赖</a></div>
+    </li>
+  </ul>
+
+        
+
+<div>
+<ul class="post-copyright">
+  <li class="post-copyright-author">
+    <strong>本文作者： </strong>穹柏
+  </li>
+  <li class="post-copyright-link">
+    <strong>本文链接：</strong>
+    <a href="https://www.krivers.fun/posts/60737/" title="踩坑日记之Gradle自定义JacocoReport跟Test task">https://www.krivers.fun/posts/60737/</a>
+  </li>
+  <li class="post-copyright-license">
+    <strong>版权声明： </strong>本博客所有文章除特别声明外，均采用 <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" rel="noopener" target="_blank"><i class="fab fa-fw fa-creative-commons"></i>BY-NC-SA</a> 许可协议。转载请注明出处！
+  </li>
+</ul>
+</div>
+
+        
+
+  <div class="followme">
+    <p>欢迎关注我的其它发布渠道</p>
+
+    <div class="social-list">
+
+        <div class="social-item">
+          <a target="_blank" class="social-link" href="/atom.xml">
+            <span class="icon">
+              <i class="fa fa-rss"></i>
+            </span>
+
+            <span class="label">RSS</span>
+          </a>
+        </div>
+    </div>
+  </div>
+
+
+      <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/%E6%8A%80%E6%9C%AF/" rel="tag"># 技术</a>
+              <a href="/tags/%E8%B8%A9%E5%9D%91/" rel="tag"># 踩坑</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/posts/48796/" rel="prev" title="单元测试之浅析Mockito mock Kotlin Object类方法">
+      <i class="fa fa-chevron-left"></i> 单元测试之浅析Mockito mock Kotlin Object类方法
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/posts/4224/" rel="next" title="杂谈之树莓派挂载硬盘">
+      杂谈之树莓派挂载硬盘 <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          文章目录
+        </li>
+        <li class="sidebar-nav-overview">
+          站点概览
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#%E8%B5%B7%E5%9B%A0"><span class="nav-number">1.</span> <span class="nav-text">起因</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#1-%E4%B8%BA%E4%BB%80%E4%B9%88JacocoTestReport%E6%80%BB%E6%98%AF%E8%A2%ABSKIPPED"><span class="nav-number">2.</span> <span class="nav-text">1. 为什么JacocoTestReport总是被SKIPPED</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#2-task%E9%87%8C%E7%9A%84onlyIf"><span class="nav-number">3.</span> <span class="nav-text">2. task里的onlyIf</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#2-1-SkipOnlyIfTaskExecuter"><span class="nav-number">3.1.</span> <span class="nav-text">2.1 SkipOnlyIfTaskExecuter</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#2-2-onlyIf%E7%94%A8%E6%B3%95"><span class="nav-number">3.2.</span> <span class="nav-text">2.2 onlyIf用法</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#2-2-1-%E8%87%AA%E5%AE%9A%E4%B9%89%E8%A7%84%E5%88%99%E4%BD%9C%E4%B8%BA%E5%94%AF%E4%B8%80%E5%88%A4%E6%96%AD%E6%9D%A1%E4%BB%B6"><span class="nav-number">3.2.1.</span> <span class="nav-text">2.2.1 自定义规则作为唯一判断条件</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#2-2-2-%E8%87%AA%E5%AE%9A%E4%B9%89%E8%A7%84%E5%88%99%E4%BD%9C%E4%B8%BA%E6%9D%A1%E4%BB%B6%E5%88%A4%E6%96%AD%E7%9A%84%E4%B8%80%E9%83%A8%E5%88%86"><span class="nav-number">3.2.2.</span> <span class="nav-text">2.2.2 自定义规则作为条件判断的一部分</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#3-jacocoTestReport%E7%9A%84onlyIf%E4%B8%BA%E4%BB%80%E4%B9%88%E2%80%9D%E9%BB%98%E8%AE%A4%E2%80%9D%E6%98%AFfalse"><span class="nav-number">4.</span> <span class="nav-text">3. jacocoTestReport的onlyIf为什么”默认”是false</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#4-jacocoTestReport%E7%9A%84executionData%E4%B8%BA%E4%BB%80%E4%B9%88%E4%BC%9A%E9%BB%98%E8%AE%A4%E5%8C%85%E5%90%AB%E2%80%9Dtest-exec%E2%80%9D"><span class="nav-number">5.</span> <span class="nav-text">4. jacocoTestReport的executionData为什么会默认包含”test.exec”</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#5-%E6%80%8E%E4%B9%88%E5%AE%9E%E7%8E%B0%E6%9C%80%E5%88%9D%E7%9A%84%E7%9B%AE%E6%A0%87"><span class="nav-number">6.</span> <span class="nav-text">5. 怎么实现最初的目标</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#5-1-%E6%B8%85%E7%A9%BA%E5%B9%B6%E9%87%8D%E6%96%B0%E8%AE%BE%E7%BD%AE"><span class="nav-number">6.1.</span> <span class="nav-text">5.1 清空并重新设置</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#5-2-%E8%87%AA%E5%AE%9A%E4%B9%89%E4%B8%80%E4%B8%AA%E5%B9%B2%E5%87%80%E7%9A%84JacocoReport"><span class="nav-number">6.2.</span> <span class="nav-text">5.2 自定义一个干净的JacocoReport</span></a></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E4%B8%80%E4%BA%9B%E5%94%A0%E5%8F%A8-%E6%B2%A1%E4%BB%80%E4%B9%88%E8%90%A5%E5%85%BB%EF%BC%8C%E5%8F%AF%E8%B7%B3%E8%BF%87"><span class="nav-number">7.</span> <span class="nav-text">一些唠叨(没什么营养，可跳过)</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E6%80%BB%E7%BB%93"><span class="nav-number">8.</span> <span class="nav-text">总结</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#github"><span class="nav-number">9.</span> <span class="nav-text">github</span></a></li></ol></div>
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="穹柏"
+      src="/images/avatar.jpg">
+  <p class="site-author-name" itemprop="name">穹柏</p>
+  <div class="site-description" itemprop="description">My Blog</div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">19</span>
+          <span class="site-state-item-name">日志</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/categories/">
+          
+        <span class="site-state-item-count">1</span>
+        <span class="site-state-item-name">分类</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/tags/">
+          
+        <span class="site-state-item-count">17</span>
+        <span class="site-state-item-name">标签</span></a>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author motion-element">
+      <span class="links-of-author-item">
+        <a href="https://github.com/scientificCommunity" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;scientificCommunity" rel="noopener" target="_blank"><i class="fab fa-github fa-fw"></i>GitHub</a>
+      </span>
+      <span class="links-of-author-item">
+        <a href="mailto:rivers.boat.snow@gmail.com" title="E-Mail → mailto:rivers.boat.snow@gmail.com" rel="noopener" target="_blank"><i class="fa fa-envelope fa-fw"></i>E-Mail</a>
+      </span>
+      <span class="links-of-author-item">
+        <a href="https://stackoverflow.com/users/15755323/krivers" title="StackOverflow → https:&#x2F;&#x2F;stackoverflow.com&#x2F;users&#x2F;15755323&#x2F;krivers" rel="noopener" target="_blank"><i class="fab fa-stack-overflow fa-fw"></i>StackOverflow</a>
+      </span>
+  </div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2023</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">穹柏</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+      <span class="post-meta-item-text">站点总字数：</span>
+    <span title="站点总字数">26k</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+      <span class="post-meta-item-text">站点阅读时长 &asymp;</span>
+    <span title="站点阅读时长">47 分钟</span>
+</div>
+
+        
+<div class="busuanzi-count">
+  <script data-pjax async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+    <span class="post-meta-item" id="busuanzi_container_site_uv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="fa fa-user"></i>
+      </span>
+      <span class="site-uv" title="总访客量">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="fa fa-eye"></i>
+      </span>
+      <span class="site-pv" title="总访问量">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="/lib/pjax/pjax.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+  <script>
+var pjax = new Pjax({
+  selectors: [
+    'head title',
+    '#page-configurations',
+    '.content-wrap',
+    '.post-toc-wrap',
+    '.languages',
+    '#pjax'
+  ],
+  switches: {
+    '.post-toc-wrap': Pjax.switches.innerHTML
+  },
+  analytics: false,
+  cacheBust: false,
+  scrollTo : !CONFIG.bookmark.enable
+});
+
+window.addEventListener('pjax:success', () => {
+  document.querySelectorAll('script[data-pjax], script#page-configurations, #pjax script').forEach(element => {
+    var code = element.text || element.textContent || element.innerHTML || '';
+    var parent = element.parentNode;
+    parent.removeChild(element);
+    var script = document.createElement('script');
+    if (element.id) {
+      script.id = element.id;
+    }
+    if (element.className) {
+      script.className = element.className;
+    }
+    if (element.type) {
+      script.type = element.type;
+    }
+    if (element.src) {
+      script.src = element.src;
+      // Force synchronous loading of peripheral JS.
+      script.async = false;
+    }
+    if (element.dataset.pjax !== undefined) {
+      script.dataset.pjax = '';
+    }
+    if (code !== '') {
+      script.appendChild(document.createTextNode(code));
+    }
+    parent.appendChild(script);
+  });
+  NexT.boot.refresh();
+  // Define Motion Sequence & Bootstrap Motion.
+  if (CONFIG.motion.enable) {
+    NexT.motion.integrator
+      .init()
+      .add(NexT.motion.middleWares.subMenu)
+      .add(NexT.motion.middleWares.postList)
+      .bootstrap();
+  }
+  NexT.utils.updateSidebarPosition();
+});
+</script>
+
+
+
+
+  
+
+
+
+
+  
+<script src="/js/local-search.js"></script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+    <div id="pjax">
+  
+
+  
+
+    </div>
+</body>
+</html>

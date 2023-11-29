@@ -91,23 +91,6 @@
   </entry>
   
   <entry>
-    <title>杂谈之树莓派挂载硬盘</title>
-    <link href="https://www.krivers.fun/posts/4224/"/>
-    <id>https://www.krivers.fun/posts/4224/</id>
-    <published>2021-09-19T15:36:42.000Z</published>
-    <updated>2023-11-29T06:33:26.507Z</updated>
-    
-    
-    <summary type="html">挂载步骤...</summary>
-    
-    
-    
-    
-    <category term="杂谈" scheme="https://www.krivers.fun/tags/%E6%9D%82%E8%B0%88/"/>
-    
-  </entry>
-  
-  <entry>
     <title>杂谈之非root用户运行docker命令</title>
     <link href="https://www.krivers.fun/posts/10743/"/>
     <id>https://www.krivers.fun/posts/10743/</id>
@@ -127,6 +110,23 @@
     
     
     <category term="技术" scheme="https://www.krivers.fun/tags/%E6%8A%80%E6%9C%AF/"/>
+    
+  </entry>
+  
+  <entry>
+    <title>杂谈之树莓派挂载硬盘</title>
+    <link href="https://www.krivers.fun/posts/4224/"/>
+    <id>https://www.krivers.fun/posts/4224/</id>
+    <published>2021-09-19T15:36:42.000Z</published>
+    <updated>2023-11-29T06:33:26.507Z</updated>
+    
+    
+    <summary type="html">挂载步骤...</summary>
+    
+    
+    
+    
+    <category term="杂谈" scheme="https://www.krivers.fun/tags/%E6%9D%82%E8%B0%88/"/>
     
   </entry>
   

@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.4.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/avatar.jpg">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/avatar.jpg">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+  <meta name="google-site-verification" content="dAEXqqGBo9pJ5H-Rd3DBK9vd8XTKa7uqPUTqfxdymBo">
+  <meta name="msvalidate.01" content="61A847A9CB3F5D2204C7BB5E36CC2C0E">
+  <meta name="yandex-verification" content="c5b6aa05eb3ca719">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"www.krivers.fun","root":"/","scheme":"Pisces","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":true,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":true,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}},"path":"search.xml"};
+  </script>
+
+  <meta name="description" content="概览首先我们通过@GlobalTransactional这个注解开启一个全局事务，而GlobalTransactionScanner.wrapIfNecessary()会为所有方法上加了这个注解的bean注入一个包装了GlobalTransactionalInterceptor实例的advisor，然后返回一个代理对象。GlobalTransactionalInterceptor会在该bean的方">
+<meta property="og:type" content="article">
+<meta property="og:title" content="seata源码分析之全局事务的开启跟xid的传递">
+<meta property="og:url" content="https://www.krivers.fun/posts/b310611e/index.html">
+<meta property="og:site_name" content="穹柏">
+<meta property="og:description" content="概览首先我们通过@GlobalTransactional这个注解开启一个全局事务，而GlobalTransactionScanner.wrapIfNecessary()会为所有方法上加了这个注解的bean注入一个包装了GlobalTransactionalInterceptor实例的advisor，然后返回一个代理对象。GlobalTransactionalInterceptor会在该bean的方">
+<meta property="og:locale" content="zh_CN">
+<meta property="article:published_time" content="2018-02-10T10:25:17.000Z">
+<meta property="article:modified_time" content="2023-11-29T06:33:26.506Z">
+<meta property="article:author" content="穹柏">
+<meta property="article:tag" content="源码">
+<meta property="article:tag" content="seata">
+<meta name="twitter:card" content="summary">
+
+<link rel="canonical" href="https://www.krivers.fun/posts/b310611e/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh-CN'
+  };
+</script>
+
+  <title>seata源码分析之全局事务的开启跟xid的传递 | 穹柏</title>
+  
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-VYC4XMLJP0"></script>
+    <script data-pjax>
+      if (CONFIG.hostname === location.hostname) {
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){dataLayer.push(arguments);}
+        gtag('js', new Date());
+        gtag('config', 'G-VYC4XMLJP0');
+      }
+    </script>
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+<link rel="alternate" href="/atom.xml" title="穹柏" type="application/atom+xml">
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="切换导航栏">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">穹柏</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+      <p class="site-subtitle" itemprop="description">疏影横斜水清浅，暗香浮动月黄昏</p>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>首页</a>
+
+  </li>
+        <li class="menu-item menu-item-about">
+
+    <a href="/about/" rel="section"><i class="fa fa-user fa-fw"></i>关于</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>标签</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>分类</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>归档</a>
+
+  </li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>搜索
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+        <div class="search-header">
+  <span class="search-icon">
+    <i class="fa fa-search"></i>
+  </span>
+  <div class="search-input-container">
+    <input autocomplete="off" autocapitalize="off"
+           placeholder="搜索..." spellcheck="false"
+           type="search" class="search-input">
+  </div>
+  <span class="popup-btn-close">
+    <i class="fa fa-times-circle"></i>
+  </span>
+</div>
+<div id="search-result">
+  <div id="no-result">
+    <i class="fa fa-spinner fa-pulse fa-5x fa-fw"></i>
+  </div>
+</div>
+
+    </div>
+  </div>
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="https://www.krivers.fun/posts/b310611e/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.jpg">
+      <meta itemprop="name" content="穹柏">
+      <meta itemprop="description" content="My Blog">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="穹柏">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          seata源码分析之全局事务的开启跟xid的传递
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">发表于</span>
+
+              <time title="创建时间：2018-02-10 18:25:17" itemprop="dateCreated datePublished" datetime="2018-02-10T18:25:17+08:00">2018-02-10</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">更新于</span>
+                <time title="修改时间：2023-11-29 14:33:26" itemprop="dateModified" datetime="2023-11-29T14:33:26+08:00">2023-11-29</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">分类于</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/%E6%8A%80%E6%9C%AF/" itemprop="url" rel="index"><span itemprop="name">技术</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="阅读次数" id="busuanzi_container_page_pv" style="display: none;">
+              <span class="post-meta-item-icon">
+                <i class="fa fa-eye"></i>
+              </span>
+              <span class="post-meta-item-text">阅读次数：</span>
+              <span id="busuanzi_value_page_pv"></span>
+            </span><br>
+            <span class="post-meta-item" title="本文字数">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+                <span class="post-meta-item-text">本文字数：</span>
+              <span>2.1k</span>
+            </span>
+            <span class="post-meta-item" title="阅读时长">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+                <span class="post-meta-item-text">阅读时长 &asymp;</span>
+              <span>4 分钟</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <h1 id="概览"><a href="#概览" class="headerlink" title="概览"></a>概览</h1><h3 id="首先我们通过-GlobalTransactional这个注解开启一个全局事务，而GlobalTransactionScanner-wrapIfNecessary-会为所有方法上加了这个注解的bean注入一个包装了GlobalTransactionalInterceptor实例的advisor，然后返回一个代理对象。GlobalTransactionalInterceptor会在该bean的方法调用前进行拦截，判断是否开启全局事务"><a href="#首先我们通过-GlobalTransactional这个注解开启一个全局事务，而GlobalTransactionScanner-wrapIfNecessary-会为所有方法上加了这个注解的bean注入一个包装了GlobalTransactionalInterceptor实例的advisor，然后返回一个代理对象。GlobalTransactionalInterceptor会在该bean的方法调用前进行拦截，判断是否开启全局事务" class="headerlink" title="首先我们通过@GlobalTransactional这个注解开启一个全局事务，而GlobalTransactionScanner.wrapIfNecessary()会为所有方法上加了这个注解的bean注入一个包装了GlobalTransactionalInterceptor实例的advisor，然后返回一个代理对象。GlobalTransactionalInterceptor会在该bean的方法调用前进行拦截，判断是否开启全局事务"></a>首先我们通过@GlobalTransactional这个注解开启一个全局事务，而GlobalTransactionScanner.wrapIfNecessary()会为所有方法上加了这个注解的bean注入一个包装了GlobalTransactionalInterceptor实例的advisor，然后返回一个代理对象。GlobalTransactionalInterceptor会在该bean的方法调用前进行拦截，判断是否开启全局事务</h3><p>上源码，关键位置我打了注释</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br></pre></td><td class="code"><pre><span class="line">@Override</span><br><span class="line">protected Object wrapIfNecessary(Object bean, String beanName, Object cacheKey) &#123;</span><br><span class="line">    //判断全局事务是否启用</span><br><span class="line">    if (disableGlobalTransaction) &#123;</span><br><span class="line">        return bean;</span><br><span class="line">    &#125;</span><br><span class="line">    try &#123;</span><br><span class="line">        synchronized (PROXYED_SET) &#123;</span><br><span class="line">            if (PROXYED_SET.contains(beanName)) &#123;</span><br><span class="line">                return bean;</span><br><span class="line">            &#125;</span><br><span class="line">            interceptor = null;</span><br><span class="line">            //check TCC proxy</span><br><span class="line">            if (TCCBeanParserUtils.isTccAutoProxy(bean, beanName, applicationContext)) &#123;</span><br><span class="line">                //TCC interceptor, proxy bean of sofa:reference/dubbo:reference, and LocalTCC</span><br><span class="line">                interceptor = new TccActionInterceptor(TCCBeanParserUtils.getRemotingDesc(beanName));</span><br><span class="line">            &#125; else &#123;</span><br><span class="line">                Class&lt;?&gt; serviceInterface = SpringProxyUtils.findTargetClass(bean);</span><br><span class="line">                Class&lt;?&gt;[] interfacesIfJdk = SpringProxyUtils.findInterfaces(bean);</span><br><span class="line"></span><br><span class="line">                //判断bean里的方法上有没有@GlobalTransactional注解</span><br><span class="line">                if (!existsAnnotation(new Class[]&#123;serviceInterface&#125;)</span><br><span class="line">                    &amp;&amp; !existsAnnotation(interfacesIfJdk)) &#123;</span><br><span class="line">                    return bean;</span><br><span class="line">                &#125;</span><br><span class="line"></span><br><span class="line">                if (interceptor == null) &#123;</span><br><span class="line">                    //初始化Interceptor,后面会注入代理对象</span><br><span class="line">                    interceptor = new GlobalTransactionalInterceptor(failureHandlerHook);</span><br><span class="line">                    ConfigurationFactory.getInstance().addConfigListener(ConfigurationKeys.DISABLE_GLOBAL_TRANSACTION, (ConfigurationChangeListener) interceptor);</span><br><span class="line">                &#125;</span><br><span class="line">            &#125;</span><br><span class="line"></span><br><span class="line">            //判断当前bean是否已被aop代理过，比如说方法上加了@Transactional就会被spring代理</span><br><span class="line">            //如果没有被代理，调用父类的模板方法进行代理，advisor通过被重写的</span><br><span class="line">            //getAdvicesAndAdvisorsForBean返回上面的interceptor进行包装</span><br><span class="line">            if (!AopUtils.isAopProxy(bean)) &#123;</span><br><span class="line">                bean = super.wrapIfNecessary(bean, beanName, cacheKey);</span><br><span class="line">            &#125; else &#123;</span><br><span class="line">                AdvisedSupport advised = SpringProxyUtils.getAdvisedSupport(bean);</span><br><span class="line"></span><br><span class="line">                //把GlobalTransactionalInterceptor包装成advisor</span><br><span class="line">                Advisor[] advisor = buildAdvisors(beanName, getAdvicesAndAdvisorsForBean(null, null, null));</span><br><span class="line">                for (Advisor avr : advisor) &#123;</span><br><span class="line">                    advised.addAdvisor(0, avr);</span><br><span class="line">                &#125;</span><br><span class="line">            &#125;</span><br><span class="line">            PROXYED_SET.add(beanName);</span><br><span class="line">            return bean;</span><br><span class="line">        &#125;</span><br><span class="line">    &#125; catch (Exception exx) &#123;</span><br><span class="line">        throw new RuntimeException(exx);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">@Override</span><br><span class="line">protected Object[] getAdvicesAndAdvisorsForBean(Class beanClass, String beanName,</span><br><span class="line">  TargetSource customTargetSource) throws BeansException &#123;</span><br><span class="line"></span><br><span class="line">    //返回interceptor[]</span><br><span class="line">    return new Object[]&#123;interceptor&#125;;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">@Override</span><br><span class="line">    public void afterPropertiesSet() &#123;</span><br><span class="line">        if (disableGlobalTransaction) &#123;</span><br><span class="line">            if (LOGGER.isInfoEnabled()) &#123;</span><br><span class="line">                LOGGER.info(&quot;Global transaction is disabled.&quot;);</span><br><span class="line">            &#125;</span><br><span class="line">            return;</span><br><span class="line">        &#125;</span><br><span class="line">        //使用netty初始化seata client，建立到server端的连接</span><br><span class="line">        initClient();</span><br><span class="line">    &#125;</span><br></pre></td></tr></table></figure>
+
+<p><a href="data:image/gif;base64,R0lGODlhAQABAPABAP///wAAACH5BAEKAAAALAAAAAABAAEAAAICRAEAOw==">data:image/gif;base64,R0lGODlhAQABAPABAP///wAAACH5BAEKAAAALAAAAAABAAEAAAICRAEAOw==</a></p>
+<p>这里可以看出来，只要我们在方法上加了@GlobalTranscational注解，对应的bean就会被seata进行代理，同时重写了afterPropertiesSet，在bean初始化完毕后会进行调用，这个client就是用来跟server端通信的，包括后面会说到的下游服务的事务提交与回滚都与这个有关</p>
+<p>GlobalTransactionalInterceptor重写了MethodInterceptor的invoke()方法，在spring执行通知代理对象的通知方法时，最终会调用到这个invoke()</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line">@Override</span><br><span class="line">public Object invoke(final MethodInvocation methodInvocation) throws Throwable &#123;</span><br><span class="line">        Class&lt;?&gt; targetClass = methodInvocation.getThis() != null ?AopUtils.getTargetClass(methodInvocation.getThis()) : null;</span><br><span class="line">        Method specificMethod = ClassUtils.getMostSpecificMethod(methodInvocation.getMethod(), targetClass);</span><br><span class="line">        final Method method = BridgeMethodResolver.findBridgedMethod(specificMethod);</span><br><span class="line"></span><br><span class="line">        final GlobalTransactional globalTransactionalAnnotation = getAnnotation(method, GlobalTransactional.class);</span><br><span class="line">        final GlobalLock globalLockAnnotation = getAnnotation(method, GlobalLock.class);</span><br><span class="line">        //如果全局事务可用并且方法上加了@GlobalTransactional注解</span><br><span class="line">        if (!disable &amp;&amp; globalTransactionalAnnotation != null) &#123;</span><br><span class="line">            //处理全局事务</span><br><span class="line">            return handleGlobalTransaction(methodInvocation, globalTransactionalAnnotation);</span><br><span class="line">        &#125; else if (!disable &amp;&amp; globalLockAnnotation != null) &#123;</span><br><span class="line">            return handleGlobalLock(methodInvocation);</span><br><span class="line">        &#125; else &#123;</span><br><span class="line">            return methodInvocation.proceed();</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br></pre></td></tr></table></figure>
+
+<p><a href="data:image/gif;base64,R0lGODlhAQABAPABAP///wAAACH5BAEKAAAALAAAAAABAAEAAAICRAEAOw==">data:image/gif;base64,R0lGODlhAQABAPABAP///wAAACH5BAEKAAAALAAAAAABAAEAAAICRAEAOw==</a></p>
+<p>这里就会然后调用handleGlobalTransaction(methodInvocation, globalTransactionalAnnotation);</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br></pre></td><td class="code"><pre><span class="line">private Object handleGlobalTransaction(final MethodInvocation methodInvocation,</span><br><span class="line">                                           final GlobalTransactional globalTrxAnno) throws Throwable &#123;</span><br><span class="line">        try &#123;</span><br><span class="line">            return transactionalTemplate.execute(new TransactionalExecutor() &#123;</span><br><span class="line">                @Override</span><br><span class="line">                public Object execute() throws Throwable &#123;</span><br><span class="line">                    return methodInvocation.proceed();</span><br><span class="line">                &#125;</span><br><span class="line"></span><br><span class="line">                public String name() &#123;</span><br><span class="line">                    String name = globalTrxAnno.name();</span><br><span class="line">                    if (!StringUtils.isNullOrEmpty(name)) &#123;</span><br><span class="line">                        return name;</span><br><span class="line">                    &#125;</span><br><span class="line">                    return formatMethod(methodInvocation.getMethod());</span><br><span class="line">                &#125;</span><br><span class="line"></span><br><span class="line">                @Override</span><br><span class="line">                public TransactionInfo getTransactionInfo() &#123;</span><br><span class="line">                    TransactionInfo transactionInfo = new TransactionInfo();</span><br><span class="line">                    transactionInfo.setTimeOut(globalTrxAnno.timeoutMills());</span><br><span class="line">                    transactionInfo.setName(name());</span><br><span class="line">                    transactionInfo.setPropagation(globalTrxAnno.propagation());</span><br><span class="line">                    Set&lt;RollbackRule&gt; rollbackRules = new LinkedHashSet&lt;&gt;();</span><br><span class="line">                    for (Class&lt;?&gt; rbRule : globalTrxAnno.rollbackFor()) &#123;</span><br><span class="line">                        rollbackRules.add(new RollbackRule(rbRule));</span><br><span class="line">                    &#125;</span><br><span class="line">                    for (String rbRule : globalTrxAnno.rollbackForClassName()) &#123;</span><br><span class="line">                        rollbackRules.add(new RollbackRule(rbRule));</span><br><span class="line">                    &#125;</span><br><span class="line">                    for (Class&lt;?&gt; rbRule : globalTrxAnno.noRollbackFor()) &#123;</span><br><span class="line">                        rollbackRules.add(new NoRollbackRule(rbRule));</span><br><span class="line">                    &#125;</span><br><span class="line">                    for (String rbRule : globalTrxAnno.noRollbackForClassName()) &#123;</span><br><span class="line">                        rollbackRules.add(new NoRollbackRule(rbRule));</span><br><span class="line">                    &#125;</span><br><span class="line">                    transactionInfo.setRollbackRules(rollbackRules);</span><br><span class="line">                    return transactionInfo;</span><br><span class="line">                &#125;</span><br><span class="line">            &#125;);</span><br><span class="line">        &#125; catch (TransactionalExecutor.ExecutionException e) &#123;</span><br><span class="line">            TransactionalExecutor.Code code = e.getCode();</span><br><span class="line">            switch (code) &#123;</span><br><span class="line">                case RollbackDone:</span><br><span class="line">                    throw e.getOriginalException();</span><br><span class="line">                case BeginFailure:</span><br><span class="line">                    failureHandler.onBeginFailure(e.getTransaction(), e.getCause());</span><br><span class="line">                    throw e.getCause();</span><br><span class="line">                case CommitFailure:</span><br><span class="line">                    failureHandler.onCommitFailure(e.getTransaction(), e.getCause());</span><br><span class="line">                    throw e.getCause();</span><br><span class="line">                case RollbackFailure:</span><br><span class="line">                    failureHandler.onRollbackFailure(e.getTransaction(), e.getCause());</span><br><span class="line">                    throw e.getCause();</span><br><span class="line">                case RollbackRetrying:</span><br><span class="line">                    failureHandler.onRollbackRetrying(e.getTransaction(), e.getCause());</span><br><span class="line">                    throw e.getCause();</span><br><span class="line">                default:</span><br><span class="line">                    throw new ShouldNeverHappenException(String.format(&quot;Unknown TransactionalExecutor.Code: %s&quot;, code));</span><br><span class="line"></span><br><span class="line">            &#125;</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br></pre></td></tr></table></figure>
+
+<p><a href="data:image/gif;base64,R0lGODlhAQABAPABAP///wAAACH5BAEKAAAALAAAAAABAAEAAAICRAEAOw==">data:image/gif;base64,R0lGODlhAQABAPABAP///wAAACH5BAEKAAAALAAAAAABAAEAAAICRAEAOw==</a></p>
+<p>这里transactionalTemplate.execute（）传入了一个匿名实现，其execute()就是放行让后续的通知方法继续执行，这个我们不关心，进入transactionalTemplate.execute（）</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br></pre></td><td class="code"><pre><span class="line">public Object execute(TransactionalExecutor business) throws Throwable &#123;</span><br><span class="line">        // 1 get transactionInfo</span><br><span class="line">        TransactionInfo txInfo = business.getTransactionInfo();</span><br><span class="line">        if (txInfo == null) &#123;</span><br><span class="line">            throw new ShouldNeverHappenException(&quot;transactionInfo does not exist&quot;);</span><br><span class="line">        &#125;</span><br><span class="line">        // 1.1 get or create a transaction</span><br><span class="line">        GlobalTransaction tx = GlobalTransactionContext.getCurrentOrCreate();</span><br><span class="line"></span><br><span class="line">        // 1.2 Handle the Transaction propatation and the branchType</span><br><span class="line">        Propagation propagation = txInfo.getPropagation();</span><br><span class="line">        SuspendedResourcesHolder suspendedResourcesHolder = null;</span><br><span class="line">        try &#123;</span><br><span class="line">            switch (propagation) &#123;</span><br><span class="line">                case NOT_SUPPORTED:</span><br><span class="line">                    suspendedResourcesHolder = tx.suspend(true);</span><br><span class="line">                    return business.execute();</span><br><span class="line">                case REQUIRES_NEW:</span><br><span class="line">                    suspendedResourcesHolder = tx.suspend(true);</span><br><span class="line">                    break;</span><br><span class="line">                case SUPPORTS:</span><br><span class="line">                    if (!existingTransaction()) &#123;</span><br><span class="line">                        return business.execute();</span><br><span class="line">                    &#125;</span><br><span class="line">                    break;</span><br><span class="line">                case REQUIRED:</span><br><span class="line">                    break;</span><br><span class="line">                case NEVER:</span><br><span class="line">                    if (existingTransaction()) &#123;</span><br><span class="line">                        throw new TransactionException(</span><br><span class="line">                                String.format(&quot;Existing transaction found for transaction marked with propagation &#x27;never&#x27;,xid = %s&quot;</span><br><span class="line">                                        ,RootContext.getXID()));</span><br><span class="line">                    &#125; else &#123;</span><br><span class="line">                        return business.execute();</span><br><span class="line">                    &#125;</span><br><span class="line">                case MANDATORY:</span><br><span class="line">                    if (!existingTransaction()) &#123;</span><br><span class="line">                        throw new TransactionException(&quot;No existing transaction found for transaction marked with propagation &#x27;mandatory&#x27;&quot;);</span><br><span class="line">                    &#125;</span><br><span class="line">                    break;</span><br><span class="line">                default:</span><br><span class="line">                    throw new TransactionException(&quot;Not Supported Propagation:&quot; + propagation);</span><br><span class="line">            &#125;</span><br><span class="line"></span><br><span class="line">            try &#123;</span><br><span class="line"></span><br><span class="line">                // 2. begin transaction</span><br><span class="line">                beginTransaction(txInfo, tx);</span><br><span class="line"></span><br><span class="line">                Object rs = null;</span><br><span class="line">                try &#123;</span><br><span class="line"></span><br><span class="line">                    // Do Your Business</span><br><span class="line">                    rs = business.execute();</span><br><span class="line"></span><br><span class="line">                &#125; catch (Throwable ex) &#123;</span><br><span class="line"></span><br><span class="line">                    // 3.the needed business exception to rollback.</span><br><span class="line">                    completeTransactionAfterThrowing(txInfo, tx, ex);</span><br><span class="line">                    throw ex;</span><br><span class="line">                &#125;</span><br><span class="line"></span><br><span class="line">                // 4. everything is fine, commit.</span><br><span class="line">                commitTransaction(tx);</span><br><span class="line"></span><br><span class="line">                return rs;</span><br><span class="line">            &#125; finally &#123;</span><br><span class="line">                //5. clear</span><br><span class="line">                triggerAfterCompletion();</span><br><span class="line">                cleanUp();</span><br><span class="line">            &#125;</span><br><span class="line">        &#125; finally &#123;</span><br><span class="line">            tx.resume(suspendedResourcesHolder);</span><br><span class="line">        &#125;</span><br><span class="line"></span><br><span class="line">    &#125;</span><br></pre></td></tr></table></figure>
+
+<p><a href="data:image/gif;base64,R0lGODlhAQABAPABAP///wAAACH5BAEKAAAALAAAAAABAAEAAAICRAEAOw==">data:image/gif;base64,R0lGODlhAQABAPABAP///wAAACH5BAEKAAAALAAAAAABAAEAAAICRAEAOw==</a></p>
+<p>这里首先初始化一个GlobalTransaction实例tx，用于保存后续生成的xid跟事务状态等一些属性。然后对事务的传播属性做了些校验。然后我们进入beginTransaction(txInfo, tx);顾名思义，这里快要到核心了</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line">private void beginTransaction(TransactionInfo txInfo, GlobalTransaction tx) throws TransactionalExecutor.ExecutionException &#123;</span><br><span class="line">        try &#123;</span><br><span class="line">            //执行hook的begin()方法做一些额外处理</span><br><span class="line">            triggerBeforeBegin();</span><br><span class="line">            tx.begin(txInfo.getTimeOut(), txInfo.getName());</span><br><span class="line">            triggerAfterBegin();</span><br><span class="line">        &#125; catch (TransactionException txe) &#123;</span><br><span class="line">            throw new TransactionalExecutor.ExecutionException(tx, txe,</span><br><span class="line">                TransactionalExecutor.Code.BeginFailure);</span><br><span class="line"></span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br></pre></td></tr></table></figure>
+
+<p><a href="data:image/gif;base64,R0lGODlhAQABAPABAP///wAAACH5BAEKAAAALAAAAAABAAEAAAICRAEAOw==">data:image/gif;base64,R0lGODlhAQABAPABAP///wAAACH5BAEKAAAALAAAAAABAAEAAAICRAEAOw==</a></p>
+<p>这里的trigger方法执行我们通过TransactionHookManager.registerHook()注册的一些hook方法，如果我们要在事务开始前后做一些事情，就可以通过这种方式。</p>
+<p>进入tx.begin()</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br></pre></td><td class="code"><pre><span class="line">@Override</span><br><span class="line">public void begin(int timeout, String name) throws TransactionException &#123;</span><br><span class="line">    if (role != GlobalTransactionRole.Launcher) &#123;</span><br><span class="line">        assertXIDNotNull();</span><br><span class="line">        if (LOGGER.isDebugEnabled()) &#123;</span><br><span class="line">            LOGGER.debug(&quot;Ignore Begin(): just involved in global transaction [&#123;&#125;]&quot;, xid);</span><br><span class="line">        &#125;</span><br><span class="line">        return;</span><br><span class="line">    &#125;</span><br><span class="line">    assertXIDNull();</span><br><span class="line">    if (RootContext.getXID() != null) &#123;</span><br><span class="line">        throw new IllegalStateException();</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    //开启事务并拿到xid</span><br><span class="line">    xid = transactionManager.begin(null, null, name, timeout);</span><br><span class="line">    //设置事务状态</span><br><span class="line">    status = GlobalStatus.Begin;</span><br><span class="line">    //xid跟当前线程做全局绑定</span><br><span class="line">    RootContext.bind(xid);</span><br><span class="line">    if (LOGGER.isInfoEnabled()) &#123;</span><br><span class="line">        LOGGER.info(&quot;Begin new global transaction [&#123;&#125;]&quot;, xid);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p><a href="data:image/gif;base64,R0lGODlhAQABAPABAP///wAAACH5BAEKAAAALAAAAAABAAEAAAICRAEAOw==">data:image/gif;base64,R0lGODlhAQABAPABAP///wAAACH5BAEKAAAALAAAAAABAAEAAAICRAEAOw==</a></p>
+<p>继续到 transactionManager.begin</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line">@Override</span><br><span class="line">public String begin(String applicationId, String transactionServiceGroup, String name, int timeout)</span><br><span class="line">    throws TransactionException &#123;</span><br><span class="line">    GlobalBeginRequest request = new GlobalBeginRequest();</span><br><span class="line">    request.setTransactionName(name);</span><br><span class="line">    request.setTimeout(timeout);</span><br><span class="line"></span><br><span class="line">    //通知seata-server开启全局事务，并拿到全局事务id(xid)</span><br><span class="line">    GlobalBeginResponse response = (GlobalBeginResponse)syncCall(request);</span><br><span class="line">    if (response.getResultCode() == ResultCode.Failed) &#123;</span><br><span class="line">        throw new TmTransactionException(TransactionExceptionCode.BeginFailed, response.getMsg());</span><br><span class="line">    &#125;</span><br><span class="line">    return response.getXid();</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p><a href="data:image/gif;base64,R0lGODlhAQABAPABAP///wAAACH5BAEKAAAALAAAAAABAAEAAAICRAEAOw==">data:image/gif;base64,R0lGODlhAQABAPABAP///wAAACH5BAEKAAAALAAAAAABAAEAAAICRAEAOw==</a></p>
+<p>最后我们就开启了一个全局事务，那么我们的xid是怎么向下游传递的呢，看看对feign的集成是怎么做的？SeataFeignClient.execute</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br></pre></td><td class="code"><pre><span class="line">   @Override</span><br><span class="line">public Response execute(Request request, Request.Options options) throws IOException &#123;</span><br><span class="line"></span><br><span class="line">       //设置xid</span><br><span class="line">	Request modifiedRequest = getModifyRequest(request);</span><br><span class="line">       //调用下游服务</span><br><span class="line">	return this.delegate.execute(modifiedRequest, options);</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">private Request getModifyRequest(Request request) &#123;</span><br><span class="line"></span><br><span class="line">	String xid = RootContext.getXID();</span><br><span class="line"></span><br><span class="line">	if (StringUtils.isEmpty(xid)) &#123;</span><br><span class="line">		return request;</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	Map&lt;String, Collection&lt;String&gt;&gt; headers = new HashMap&lt;&gt;(MAP_SIZE);</span><br><span class="line">       //设置xid到消息头</span><br><span class="line">	headers.putAll(request.headers());</span><br><span class="line"></span><br><span class="line">	List&lt;String&gt; seataXid = new ArrayList&lt;&gt;();</span><br><span class="line">	seataXid.add(xid);</span><br><span class="line">	headers.put(RootContext.KEY_XID, seataXid);</span><br><span class="line"></span><br><span class="line">	return Request.create(request.method(), request.url(), headers, request.body(),</span><br><span class="line">			request.charset());</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p><a href="data:image/gif;base64,R0lGODlhAQABAPABAP///wAAACH5BAEKAAAALAAAAAABAAEAAAICRAEAOw==">data:image/gif;base64,R0lGODlhAQABAPABAP///wAAACH5BAEKAAAALAAAAAABAAEAAAICRAEAOw==</a></p>
+<p>这里用SeataFeignClient替换了默认的feignClient，把xid放到了requestHeader里。那么下游又是怎么拿的呢？SeataHandlerInterceptor.preHandle()</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br></pre></td><td class="code"><pre><span class="line">      @Override</span><br><span class="line">public boolean preHandle(HttpServletRequest request, HttpServletResponse response,</span><br><span class="line">		Object handler) &#123;</span><br><span class="line"></span><br><span class="line">	String xid = RootContext.getXID();</span><br><span class="line"></span><br><span class="line">               //从消息头中获取xid</span><br><span class="line">	String rpcXid = request.getHeader(RootContext.KEY_XID);</span><br><span class="line">	if (log.isDebugEnabled()) &#123;</span><br><span class="line">		log.debug(&quot;xid in RootContext &#123;&#125; xid in RpcContext &#123;&#125;&quot;, xid, rpcXid);</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	if (xid == null &amp;&amp; rpcXid != null) &#123;</span><br><span class="line">		RootContext.bind(rpcXid);</span><br><span class="line">		if (log.isDebugEnabled()) &#123;</span><br><span class="line">			log.debug(&quot;bind &#123;&#125; to RootContext&quot;, rpcXid);</span><br><span class="line">		&#125;</span><br><span class="line">	&#125;</span><br><span class="line">	return true;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p><a href="data:image/gif;base64,R0lGODlhAQABAPABAP///wAAACH5BAEKAAAALAAAAAABAAEAAAICRAEAOw==">data:image/gif;base64,R0lGODlhAQABAPABAP///wAAACH5BAEKAAAALAAAAAABAAEAAAICRAEAOw==</a></p>
+<p>这里SeataHandlerInterceptor实现了HandlerInterceptor，springMVC会在Controller方法调用之前拿到所有注册到容器中的拦截器链去执行其preHandle()方法，具体可参考DispatcherServlet.doDispatch()。</p>
+<p>好了，到这里就大概把seata的全局事务的开启以及xid的传递捋了一遍，后面会聊聊seata跟hystrix做集成时常见的一些坑</p>
+
+    </div>
+
+    
+    
+    
+      
+  <div class="popular-posts-header">推荐内容</div>
+  <ul class="popular-posts">
+    <li class="popular-posts-item">
+      <div class="popular-posts-title"><a href="/posts/940a39da/" rel="bookmark">seata源码分析之如何控制下游服务的提交与回滚</a></div>
+    </li>
+    <li class="popular-posts-item">
+      <div class="popular-posts-title"><a href="/posts/f0ea53d7/" rel="bookmark">Spring源码浅析之@Autowired如何解决循环依赖</a></div>
+    </li>
+    <li class="popular-posts-item">
+      <div class="popular-posts-title"><a href="/posts/992afad8/" rel="bookmark">Spring源码浅析之事物管理</a></div>
+    </li>
+    <li class="popular-posts-item">
+      <div class="popular-posts-title"><a href="/posts/4fc0a6f7/" rel="bookmark">vert.x源码浅析之redis集成</a></div>
+    </li>
+  </ul>
+
+        
+
+<div>
+<ul class="post-copyright">
+  <li class="post-copyright-author">
+    <strong>本文作者： </strong>穹柏
+  </li>
+  <li class="post-copyright-link">
+    <strong>本文链接：</strong>
+    <a href="https://www.krivers.fun/posts/b310611e/" title="seata源码分析之全局事务的开启跟xid的传递">https://www.krivers.fun/posts/b310611e/</a>
+  </li>
+  <li class="post-copyright-license">
+    <strong>版权声明： </strong>本博客所有文章除特别声明外，均采用 <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" rel="noopener" target="_blank"><i class="fab fa-fw fa-creative-commons"></i>BY-NC-SA</a> 许可协议。转载请注明出处！
+  </li>
+</ul>
+</div>
+
+        
+
+  <div class="followme">
+    <p>欢迎关注我的其它发布渠道</p>
+
+    <div class="social-list">
+
+        <div class="social-item">
+          <a target="_blank" class="social-link" href="/atom.xml">
+            <span class="icon">
+              <i class="fa fa-rss"></i>
+            </span>
+
+            <span class="label">RSS</span>
+          </a>
+        </div>
+    </div>
+  </div>
+
+
+      <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/%E6%BA%90%E7%A0%81/" rel="tag"># 源码</a>
+              <a href="/tags/seata/" rel="tag"># seata</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item"></div>
+      <div class="post-nav-item">
+    <a href="/posts/940a39da/" rel="next" title="seata源码分析之如何控制下游服务的提交与回滚">
+      seata源码分析之如何控制下游服务的提交与回滚 <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          文章目录
+        </li>
+        <li class="sidebar-nav-overview">
+          站点概览
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#%E6%A6%82%E8%A7%88"><span class="nav-number">1.</span> <span class="nav-text">概览</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E9%A6%96%E5%85%88%E6%88%91%E4%BB%AC%E9%80%9A%E8%BF%87-GlobalTransactional%E8%BF%99%E4%B8%AA%E6%B3%A8%E8%A7%A3%E5%BC%80%E5%90%AF%E4%B8%80%E4%B8%AA%E5%85%A8%E5%B1%80%E4%BA%8B%E5%8A%A1%EF%BC%8C%E8%80%8CGlobalTransactionScanner-wrapIfNecessary-%E4%BC%9A%E4%B8%BA%E6%89%80%E6%9C%89%E6%96%B9%E6%B3%95%E4%B8%8A%E5%8A%A0%E4%BA%86%E8%BF%99%E4%B8%AA%E6%B3%A8%E8%A7%A3%E7%9A%84bean%E6%B3%A8%E5%85%A5%E4%B8%80%E4%B8%AA%E5%8C%85%E8%A3%85%E4%BA%86GlobalTransactionalInterceptor%E5%AE%9E%E4%BE%8B%E7%9A%84advisor%EF%BC%8C%E7%84%B6%E5%90%8E%E8%BF%94%E5%9B%9E%E4%B8%80%E4%B8%AA%E4%BB%A3%E7%90%86%E5%AF%B9%E8%B1%A1%E3%80%82GlobalTransactionalInterceptor%E4%BC%9A%E5%9C%A8%E8%AF%A5bean%E7%9A%84%E6%96%B9%E6%B3%95%E8%B0%83%E7%94%A8%E5%89%8D%E8%BF%9B%E8%A1%8C%E6%8B%A6%E6%88%AA%EF%BC%8C%E5%88%A4%E6%96%AD%E6%98%AF%E5%90%A6%E5%BC%80%E5%90%AF%E5%85%A8%E5%B1%80%E4%BA%8B%E5%8A%A1"><span class="nav-number">1.0.1.</span> <span class="nav-text">首先我们通过@GlobalTransactional这个注解开启一个全局事务，而GlobalTransactionScanner.wrapIfNecessary()会为所有方法上加了这个注解的bean注入一个包装了GlobalTransactionalInterceptor实例的advisor，然后返回一个代理对象。GlobalTransactionalInterceptor会在该bean的方法调用前进行拦截，判断是否开启全局事务</span></a></li></ol></li></ol></li></ol></div>
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="穹柏"
+      src="/images/avatar.jpg">
+  <p class="site-author-name" itemprop="name">穹柏</p>
+  <div class="site-description" itemprop="description">My Blog</div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">19</span>
+          <span class="site-state-item-name">日志</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/categories/">
+          
+        <span class="site-state-item-count">1</span>
+        <span class="site-state-item-name">分类</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/tags/">
+          
+        <span class="site-state-item-count">17</span>
+        <span class="site-state-item-name">标签</span></a>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author motion-element">
+      <span class="links-of-author-item">
+        <a href="https://github.com/scientificCommunity" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;scientificCommunity" rel="noopener" target="_blank"><i class="fab fa-github fa-fw"></i>GitHub</a>
+      </span>
+      <span class="links-of-author-item">
+        <a href="mailto:rivers.boat.snow@gmail.com" title="E-Mail → mailto:rivers.boat.snow@gmail.com" rel="noopener" target="_blank"><i class="fa fa-envelope fa-fw"></i>E-Mail</a>
+      </span>
+      <span class="links-of-author-item">
+        <a href="https://stackoverflow.com/users/15755323/krivers" title="StackOverflow → https:&#x2F;&#x2F;stackoverflow.com&#x2F;users&#x2F;15755323&#x2F;krivers" rel="noopener" target="_blank"><i class="fab fa-stack-overflow fa-fw"></i>StackOverflow</a>
+      </span>
+  </div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2023</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">穹柏</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+      <span class="post-meta-item-text">站点总字数：</span>
+    <span title="站点总字数">26k</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+      <span class="post-meta-item-text">站点阅读时长 &asymp;</span>
+    <span title="站点阅读时长">47 分钟</span>
+</div>
+
+        
+<div class="busuanzi-count">
+  <script data-pjax async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+    <span class="post-meta-item" id="busuanzi_container_site_uv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="fa fa-user"></i>
+      </span>
+      <span class="site-uv" title="总访客量">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="fa fa-eye"></i>
+      </span>
+      <span class="site-pv" title="总访问量">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="/lib/pjax/pjax.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+  <script>
+var pjax = new Pjax({
+  selectors: [
+    'head title',
+    '#page-configurations',
+    '.content-wrap',
+    '.post-toc-wrap',
+    '.languages',
+    '#pjax'
+  ],
+  switches: {
+    '.post-toc-wrap': Pjax.switches.innerHTML
+  },
+  analytics: false,
+  cacheBust: false,
+  scrollTo : !CONFIG.bookmark.enable
+});
+
+window.addEventListener('pjax:success', () => {
+  document.querySelectorAll('script[data-pjax], script#page-configurations, #pjax script').forEach(element => {
+    var code = element.text || element.textContent || element.innerHTML || '';
+    var parent = element.parentNode;
+    parent.removeChild(element);
+    var script = document.createElement('script');
+    if (element.id) {
+      script.id = element.id;
+    }
+    if (element.className) {
+      script.className = element.className;
+    }
+    if (element.type) {
+      script.type = element.type;
+    }
+    if (element.src) {
+      script.src = element.src;
+      // Force synchronous loading of peripheral JS.
+      script.async = false;
+    }
+    if (element.dataset.pjax !== undefined) {
+      script.dataset.pjax = '';
+    }
+    if (code !== '') {
+      script.appendChild(document.createTextNode(code));
+    }
+    parent.appendChild(script);
+  });
+  NexT.boot.refresh();
+  // Define Motion Sequence & Bootstrap Motion.
+  if (CONFIG.motion.enable) {
+    NexT.motion.integrator
+      .init()
+      .add(NexT.motion.middleWares.subMenu)
+      .add(NexT.motion.middleWares.postList)
+      .bootstrap();
+  }
+  NexT.utils.updateSidebarPosition();
+});
+</script>
+
+
+
+
+  
+
+
+
+
+  
+<script src="/js/local-search.js"></script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+    <div id="pjax">
+  
+
+  
+
+    </div>
+</body>
+</html>

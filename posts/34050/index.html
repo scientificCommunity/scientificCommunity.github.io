@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.4.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/avatar.jpg">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/avatar.jpg">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+  <meta name="google-site-verification" content="dAEXqqGBo9pJ5H-Rd3DBK9vd8XTKa7uqPUTqfxdymBo">
+  <meta name="msvalidate.01" content="61A847A9CB3F5D2204C7BB5E36CC2C0E">
+  <meta name="yandex-verification" content="c5b6aa05eb3ca719">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"www.krivers.fun","root":"/","scheme":"Pisces","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":true,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":true,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}},"path":"search.xml"};
+  </script>
+
+  <meta name="description" content="AUTO_INCREMENT用于为表中的列设置一个自增序列，在非集群模式下，用它来为主键列自动生成值是一件很方便的事。并且，Mysql提供了一系列的锁机制来保证它的性能跟可靠性，通过这些锁机制，我们可以让它变得很高效。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Mysql之浅析AUTO_INCREMENT">
+<meta property="og:url" content="https://www.krivers.fun/posts/34050/index.html">
+<meta property="og:site_name" content="穹柏">
+<meta property="og:description" content="AUTO_INCREMENT用于为表中的列设置一个自增序列，在非集群模式下，用它来为主键列自动生成值是一件很方便的事。并且，Mysql提供了一系列的锁机制来保证它的性能跟可靠性，通过这些锁机制，我们可以让它变得很高效。">
+<meta property="og:locale" content="zh_CN">
+<meta property="article:published_time" content="2022-02-09T09:25:09.000Z">
+<meta property="article:modified_time" content="2023-11-29T06:33:26.506Z">
+<meta property="article:author" content="穹柏">
+<meta property="article:tag" content="技术">
+<meta property="article:tag" content="Mysql">
+<meta name="twitter:card" content="summary">
+
+<link rel="canonical" href="https://www.krivers.fun/posts/34050/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh-CN'
+  };
+</script>
+
+  <title>Mysql之浅析AUTO_INCREMENT | 穹柏</title>
+  
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-VYC4XMLJP0"></script>
+    <script data-pjax>
+      if (CONFIG.hostname === location.hostname) {
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){dataLayer.push(arguments);}
+        gtag('js', new Date());
+        gtag('config', 'G-VYC4XMLJP0');
+      }
+    </script>
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+<link rel="alternate" href="/atom.xml" title="穹柏" type="application/atom+xml">
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="切换导航栏">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">穹柏</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+      <p class="site-subtitle" itemprop="description">疏影横斜水清浅，暗香浮动月黄昏</p>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>首页</a>
+
+  </li>
+        <li class="menu-item menu-item-about">
+
+    <a href="/about/" rel="section"><i class="fa fa-user fa-fw"></i>关于</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>标签</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>分类</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>归档</a>
+
+  </li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>搜索
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+        <div class="search-header">
+  <span class="search-icon">
+    <i class="fa fa-search"></i>
+  </span>
+  <div class="search-input-container">
+    <input autocomplete="off" autocapitalize="off"
+           placeholder="搜索..." spellcheck="false"
+           type="search" class="search-input">
+  </div>
+  <span class="popup-btn-close">
+    <i class="fa fa-times-circle"></i>
+  </span>
+</div>
+<div id="search-result">
+  <div id="no-result">
+    <i class="fa fa-spinner fa-pulse fa-5x fa-fw"></i>
+  </div>
+</div>
+
+    </div>
+  </div>
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="https://www.krivers.fun/posts/34050/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.jpg">
+      <meta itemprop="name" content="穹柏">
+      <meta itemprop="description" content="My Blog">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="穹柏">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          Mysql之浅析AUTO_INCREMENT
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">发表于</span>
+
+              <time title="创建时间：2022-02-09 17:25:09" itemprop="dateCreated datePublished" datetime="2022-02-09T17:25:09+08:00">2022-02-09</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">更新于</span>
+                <time title="修改时间：2023-11-29 14:33:26" itemprop="dateModified" datetime="2023-11-29T14:33:26+08:00">2023-11-29</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">分类于</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/%E6%8A%80%E6%9C%AF/" itemprop="url" rel="index"><span itemprop="name">技术</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="阅读次数" id="busuanzi_container_page_pv" style="display: none;">
+              <span class="post-meta-item-icon">
+                <i class="fa fa-eye"></i>
+              </span>
+              <span class="post-meta-item-text">阅读次数：</span>
+              <span id="busuanzi_value_page_pv"></span>
+            </span><br>
+            <span class="post-meta-item" title="本文字数">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+                <span class="post-meta-item-text">本文字数：</span>
+              <span>2.2k</span>
+            </span>
+            <span class="post-meta-item" title="阅读时长">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+                <span class="post-meta-item-text">阅读时长 &asymp;</span>
+              <span>4 分钟</span>
+            </span>
+            <div class="post-description">AUTO_INCREMENT用于为表中的列设置一个自增序列，在非集群模式下，用它来为主键列自动生成值是一件很方便的事。并且，Mysql提供了一系列的锁机制来保证它的性能跟可靠性，通过这些锁机制，我们可以让它变得很高效。</div>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <p><code>AUTO_INCREMENT</code>用于为表中的列设置一个自增序列，在非集群模式下，用它来为主键列自动生成值是一件很方便的事。并且，Mysql提供了一系列的锁机制来保证它的性能跟可靠性，通过这些锁机制，我们可以让它变得很高效。</p>
+<h2 id="术语"><a href="#术语" class="headerlink" title="术语"></a>术语</h2><p>先来了解后面将要用到的术语。</p>
+<ul>
+<li>Simple inserts  能预先知道插入行数的语句。比如说单行插入（不包括<a target="_blank" rel="noopener" href="https://dev.mysql.com/doc/refman/8.0/en/insert-on-duplicate.html">INSERT … ON DUPLICATE KEY UPDATE</a>），不带子句的多行插入（自增列不赋值或全赋值）。</li>
+<li>Bulk inserts  不能能预先知道插入行数的语句。比如<a target="_blank" rel="noopener" href="https://dev.mysql.com/doc/refman/8.0/en/insert-select.html">INSERT … SELECT</a>, <a target="_blank" rel="noopener" href="https://dev.mysql.com/doc/refman/8.0/en/replace.html">REPLACE … SELECT</a> 。这种模式下，<code>InnoDB</code> 会在处理时为每一行的自增列一次分配一个自增值</li>
+<li>Mixed-mode inserts  <figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">INSERT</span> <span class="keyword">INTO</span> t1 (c1,c2) <span class="keyword">VALUES</span> (<span class="number">1</span>,<span class="string">&#x27;a&#x27;</span>), (<span class="keyword">NULL</span>,<span class="string">&#x27;b&#x27;</span>), (<span class="number">5</span>,<span class="string">&#x27;c&#x27;</span>), (<span class="keyword">NULL</span>,<span class="string">&#x27;d&#x27;</span>);</span><br></pre></td></tr></table></figure>
+  <a target="_blank" rel="noopener" href="https://dev.mysql.com/doc/refman/8.0/en/insert-on-duplicate.html">INSERT … ON DUPLICATE KEY UPDATE</a></li>
+<li>Insert-like  以上所有插入语句的统称</li>
+</ul>
+<h2 id="锁模式"><a href="#锁模式" class="headerlink" title="锁模式"></a>锁模式</h2><p>锁模式在启动时通过<code>innodb_autoinc_lock_mode</code>这个变量来配置，它有3个值：<code>0, 1, 2</code>。分别对应<code>traditional</code>(传统)、<code>consecutive</code>(连续)、<code>interleaved</code>(交错)3种模式。</p>
+<p>在<code>Mysql5.6~5.7</code>里，这个配置项的默认值是<code>1</code>，从<code>Mysql8</code>开始，它的默认值<code>2</code>。这个一方面是因为模式<code>2</code>的性能更好，另一方面是因为从<code>Mysql8</code>开始，默认的主从复制的方式由<code>statement-based</code> 改为了<code>row based</code>。<code>row based</code> 能保证<code>innodb_autoinc_lock_mode=2</code>时主从复制时的数据不会出现不一致的问题。好了，下面开始详细了解这三种锁模式吧！</p>
+<ul>
+<li>traditional  在这种模式下，Mysql所有的<code>Insert-like</code>操作都会设置一个表级别的<code>AUTO-INC</code> 锁，这个锁会在单条语句执行完毕时释放。  也就是说，如果有多个事务同时对同一张表执行<code>Insert-like</code> 操作，那么，即使它们没有操作同一条记录，也会串行执行。所以，它的性能相对另外两种模式来说会比较糟糕。</li>
+<li>consecutive  在这种模式下，对于<code>Simple inserts</code>语句，<code>Mysql</code>会在语句执行的初始阶段将一条语句需要的所有自增值会一次性分配出来，并且通过设置一个互斥量来保证自增序列的一致性，一旦自增值生成完毕，这个互斥量会立即释放，不需要等到语句执行结束。  所以，在<code>consecutive</code>模式，多事务并发执行<code>Simple inserts</code>这类语句时， 相对traditional模式，性能会有比较大的提升。  由于一开始就为语句分配了所有需要的自增值，那么对于像<code>Mixed-mode inserts</code>这类语句，就有可能多分配了一些值给它，从而导致自增序列出现”<strong>空隙</strong>“。而<code>traditional</code>模式因为每一次只会为一条记录分配自增值，所有不会有这种问题。  另外，对于<code>Bulk inserts</code>语句，依然会采取<code>AUTO-INC</code>锁。所以，如果有一条<code>Bulk inserts</code>语句正在执行的话，<code>Simple inserts</code>也必须等到该语句执行完毕才能继续执行。</li>
+<li>interleaved  在这种模式下，对于所有的<code>Insert-like</code>语句，都不会存在表级别的<code>AUTO-INC</code>锁，意味着同一张表上的多个语句并发时阻塞会大幅减少。  但是，这种模式必须运行在<code>row based</code>或者<code>mixed-format</code>(其实说白了也是row based，只不过mysql会根据自增模式为不安全的语句自动选择row based模式)复制模式下。因为<code>interleaved</code>这种模式下对于相同顺序的语句每次执行行都会产生不同的结果(谁竞争到<strong>互斥量</strong>，谁就能获得生成自增值的权利)，所以，如果复制模式是<code>statement-based</code>或者通过<code>binlog</code>进行数据恢复时(牵扯到binlog的语句重放)，可能会导致数据不一致。</li>
+</ul>
+<h2 id="注意点"><a href="#注意点" class="headerlink" title="注意点"></a>注意点</h2><ul>
+<li>自增值的生成后是不能回滚的，所以自增值生成后，事务回滚了，那么那些已经生成的自增值就丢失了，从而使自增列的数据出现空隙</li>
+<li>正常情况下，自增列是不存在<code>0</code>这个值的。所以，如果插入语句中对自增列设置的值为<code>0</code>或者<code>null</code>，就会自动应用自增序列。  那么，如果想在自增列中插入为0这个值，怎么办呢？可以通过将<a target="_blank" rel="noopener" href="https://dev.mysql.com/doc/refman/8.0/en/sql-mode.html#sqlmode_no_auto_value_on_zero">SQL Mode</a>设置为<code>NO_AUTO_VALUE_ON_ZERO</code>即可</li>
+<li>在Mysql5.7以及更早之前，自增序列的计数器(<code>auto-increment counter</code>)是保存在内存中的。<code>auto-increment counter</code>在每次Mysql重新启动后通过类似下面的这种语句进行初始化：  <figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">SELECT</span> <span class="built_in">MAX</span>(AUTO_INC_COLUMN) <span class="keyword">FROM</span> table_name <span class="keyword">FOR</span> UPDATE</span><br></pre></td></tr></table></figure>
+  而从<code>Mysql8</code>开始，<code>auto-increment counter</code>被存储在了<code>redo log</code>中，并且每次变化都会刷新到<code>redo log</code>中。另外，我们可以通过<a target="_blank" rel="noopener" href="https://dev.mysql.com/doc/refman/8.0/en/alter-table.html">ALTER TABLE … AUTO_INCREMENT = N</a> 来主动修改<br>  <code>auto-increment counter</code>。</li>
+</ul>
+<h2 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h2><ol>
+<li>单实例下，可以设置<code>innodb_autoinc_lock_mode=2</code></li>
+<li>主从<ol>
+<li>复制模式为<code>statement-based</code>，设置<code>innodb_autoinc_lock_mode=1</code></li>
+<li>复制模式为<code>row based</code>或者<code>mixed-format</code>，设置<code>innodb_autoinc_lock_mode=2</code></li>
+</ol>
+</li>
+</ol>
+<h2 id="参考链接"><a href="#参考链接" class="headerlink" title="参考链接"></a>参考链接</h2><ul>
+<li><strong><strong><a target="_blank" rel="noopener" href="https://dev.mysql.com/doc/refman/8.0/en/innodb-auto-increment-handling.html#innodb-auto-increment-lock-mode-usage-implications">15.6.1.6 AUTO_INCREMENT Handling in InnoDB</a></strong></strong></li>
+<li><strong><a target="_blank" rel="noopener" href="https://dev.mysql.com/doc/refman/8.0/en/innodb-recovery.html">15.18.2 InnoDB Recovery</a></strong></li>
+<li><strong><strong><a target="_blank" rel="noopener" href="https://dev.mysql.com/doc/refman/8.0/en/replication-features-auto-increment.html">17.5.1.1 Replication and AUTO_INCREMENT</a></strong></strong></li>
+<li><strong><a target="_blank" rel="noopener" href="https://dev.mysql.com/doc/refman/8.0/en/example-auto-increment.html">3.6.9 Using AUTO_INCREMENT</a></strong></li>
+</ul>
+
+    </div>
+
+    
+    
+    
+      
+  <div class="popular-posts-header">推荐内容</div>
+  <ul class="popular-posts">
+    <li class="popular-posts-item">
+      <div class="popular-posts-title"><a href="/posts/34049/" rel="bookmark">Mysql之浅析INSERT ON DUPLICATE</a></div>
+    </li>
+    <li class="popular-posts-item">
+      <div class="popular-posts-title"><a href="/posts/8ccc4590/" rel="bookmark">GC调优之避免临时对象进入老年代思路浅析</a></div>
+    </li>
+    <li class="popular-posts-item">
+      <div class="popular-posts-title"><a href="/posts/7dfe0119/" rel="bookmark">Auto DevOps之gitlab CI/CD</a></div>
+    </li>
+    <li class="popular-posts-item">
+      <div class="popular-posts-title"><a href="/posts/f0ea53d7/" rel="bookmark">Spring源码浅析之@Autowired如何解决循环依赖</a></div>
+    </li>
+    <li class="popular-posts-item">
+      <div class="popular-posts-title"><a href="/posts/6a250a7b/" rel="bookmark">Vertx实战之如何追踪异步函数调用</a></div>
+    </li>
+  </ul>
+
+        
+
+<div>
+<ul class="post-copyright">
+  <li class="post-copyright-author">
+    <strong>本文作者： </strong>穹柏
+  </li>
+  <li class="post-copyright-link">
+    <strong>本文链接：</strong>
+    <a href="https://www.krivers.fun/posts/34050/" title="Mysql之浅析AUTO_INCREMENT">https://www.krivers.fun/posts/34050/</a>
+  </li>
+  <li class="post-copyright-license">
+    <strong>版权声明： </strong>本博客所有文章除特别声明外，均采用 <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" rel="noopener" target="_blank"><i class="fab fa-fw fa-creative-commons"></i>BY-NC-SA</a> 许可协议。转载请注明出处！
+  </li>
+</ul>
+</div>
+
+        
+
+  <div class="followme">
+    <p>欢迎关注我的其它发布渠道</p>
+
+    <div class="social-list">
+
+        <div class="social-item">
+          <a target="_blank" class="social-link" href="/atom.xml">
+            <span class="icon">
+              <i class="fa fa-rss"></i>
+            </span>
+
+            <span class="label">RSS</span>
+          </a>
+        </div>
+    </div>
+  </div>
+
+
+      <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/%E6%8A%80%E6%9C%AF/" rel="tag"># 技术</a>
+              <a href="/tags/Mysql/" rel="tag"># Mysql</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/posts/34049/" rel="prev" title="Mysql之浅析INSERT ON DUPLICATE">
+      <i class="fa fa-chevron-left"></i> Mysql之浅析INSERT ON DUPLICATE
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/posts/655061ae/" rel="next" title="k8s">
+      k8s <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          文章目录
+        </li>
+        <li class="sidebar-nav-overview">
+          站点概览
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%9C%AF%E8%AF%AD"><span class="nav-number">1.</span> <span class="nav-text">术语</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E9%94%81%E6%A8%A1%E5%BC%8F"><span class="nav-number">2.</span> <span class="nav-text">锁模式</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%B3%A8%E6%84%8F%E7%82%B9"><span class="nav-number">3.</span> <span class="nav-text">注意点</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%80%BB%E7%BB%93"><span class="nav-number">4.</span> <span class="nav-text">总结</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%8F%82%E8%80%83%E9%93%BE%E6%8E%A5"><span class="nav-number">5.</span> <span class="nav-text">参考链接</span></a></li></ol></div>
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="穹柏"
+      src="/images/avatar.jpg">
+  <p class="site-author-name" itemprop="name">穹柏</p>
+  <div class="site-description" itemprop="description">My Blog</div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">19</span>
+          <span class="site-state-item-name">日志</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/categories/">
+          
+        <span class="site-state-item-count">1</span>
+        <span class="site-state-item-name">分类</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/tags/">
+          
+        <span class="site-state-item-count">17</span>
+        <span class="site-state-item-name">标签</span></a>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author motion-element">
+      <span class="links-of-author-item">
+        <a href="https://github.com/scientificCommunity" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;scientificCommunity" rel="noopener" target="_blank"><i class="fab fa-github fa-fw"></i>GitHub</a>
+      </span>
+      <span class="links-of-author-item">
+        <a href="mailto:rivers.boat.snow@gmail.com" title="E-Mail → mailto:rivers.boat.snow@gmail.com" rel="noopener" target="_blank"><i class="fa fa-envelope fa-fw"></i>E-Mail</a>
+      </span>
+      <span class="links-of-author-item">
+        <a href="https://stackoverflow.com/users/15755323/krivers" title="StackOverflow → https:&#x2F;&#x2F;stackoverflow.com&#x2F;users&#x2F;15755323&#x2F;krivers" rel="noopener" target="_blank"><i class="fab fa-stack-overflow fa-fw"></i>StackOverflow</a>
+      </span>
+  </div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2023</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">穹柏</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+      <span class="post-meta-item-text">站点总字数：</span>
+    <span title="站点总字数">26k</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+      <span class="post-meta-item-text">站点阅读时长 &asymp;</span>
+    <span title="站点阅读时长">47 分钟</span>
+</div>
+
+        
+<div class="busuanzi-count">
+  <script data-pjax async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+    <span class="post-meta-item" id="busuanzi_container_site_uv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="fa fa-user"></i>
+      </span>
+      <span class="site-uv" title="总访客量">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="fa fa-eye"></i>
+      </span>
+      <span class="site-pv" title="总访问量">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="/lib/pjax/pjax.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+  <script>
+var pjax = new Pjax({
+  selectors: [
+    'head title',
+    '#page-configurations',
+    '.content-wrap',
+    '.post-toc-wrap',
+    '.languages',
+    '#pjax'
+  ],
+  switches: {
+    '.post-toc-wrap': Pjax.switches.innerHTML
+  },
+  analytics: false,
+  cacheBust: false,
+  scrollTo : !CONFIG.bookmark.enable
+});
+
+window.addEventListener('pjax:success', () => {
+  document.querySelectorAll('script[data-pjax], script#page-configurations, #pjax script').forEach(element => {
+    var code = element.text || element.textContent || element.innerHTML || '';
+    var parent = element.parentNode;
+    parent.removeChild(element);
+    var script = document.createElement('script');
+    if (element.id) {
+      script.id = element.id;
+    }
+    if (element.className) {
+      script.className = element.className;
+    }
+    if (element.type) {
+      script.type = element.type;
+    }
+    if (element.src) {
+      script.src = element.src;
+      // Force synchronous loading of peripheral JS.
+      script.async = false;
+    }
+    if (element.dataset.pjax !== undefined) {
+      script.dataset.pjax = '';
+    }
+    if (code !== '') {
+      script.appendChild(document.createTextNode(code));
+    }
+    parent.appendChild(script);
+  });
+  NexT.boot.refresh();
+  // Define Motion Sequence & Bootstrap Motion.
+  if (CONFIG.motion.enable) {
+    NexT.motion.integrator
+      .init()
+      .add(NexT.motion.middleWares.subMenu)
+      .add(NexT.motion.middleWares.postList)
+      .bootstrap();
+  }
+  NexT.utils.updateSidebarPosition();
+});
+</script>
+
+
+
+
+  
+
+
+
+
+  
+<script src="/js/local-search.js"></script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+    <div id="pjax">
+  
+
+  
+
+    </div>
+</body>
+</html>

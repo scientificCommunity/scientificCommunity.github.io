@@ -1,0 +1,722 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.4.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/avatar.jpg">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/avatar.jpg">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+  <meta name="google-site-verification" content="dAEXqqGBo9pJ5H-Rd3DBK9vd8XTKa7uqPUTqfxdymBo">
+  <meta name="msvalidate.01" content="61A847A9CB3F5D2204C7BB5E36CC2C0E">
+  <meta name="yandex-verification" content="c5b6aa05eb3ca719">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"www.krivers.fun","root":"/","scheme":"Pisces","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":true,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":true,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}},"path":"search.xml"};
+  </script>
+
+  <meta name="description" content="背景日常开发中我们经常需要处理各种系统问题，而这些系统问题通常由一些非预期的因素引起（比如非预期的输入，内存不够，网络波动等）。此时就需要知道  本次系统问题影响了谁？ 如果本次系统问题是因为非预期的输入而导致的，那么这个非预期的输入是什么？  上述两点在同步编程里可以通过全局try-catch来实现。但在异步编程里该怎么办呢？  思路我的想法是绑定一个唯一id到一次完整的请求调用中（这个完整取决">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Vertx实战之如何追踪异步函数调用">
+<meta property="og:url" content="https://www.krivers.fun/posts/6a250a7b/index.html">
+<meta property="og:site_name" content="穹柏">
+<meta property="og:description" content="背景日常开发中我们经常需要处理各种系统问题，而这些系统问题通常由一些非预期的因素引起（比如非预期的输入，内存不够，网络波动等）。此时就需要知道  本次系统问题影响了谁？ 如果本次系统问题是因为非预期的输入而导致的，那么这个非预期的输入是什么？  上述两点在同步编程里可以通过全局try-catch来实现。但在异步编程里该怎么办呢？  思路我的想法是绑定一个唯一id到一次完整的请求调用中（这个完整取决">
+<meta property="og:locale" content="zh_CN">
+<meta property="article:published_time" content="2021-06-03T11:31:41.000Z">
+<meta property="article:modified_time" content="2023-11-29T06:33:26.506Z">
+<meta property="article:author" content="穹柏">
+<meta property="article:tag" content="技术">
+<meta property="article:tag" content="jvm">
+<meta property="article:tag" content="实战">
+<meta property="article:tag" content="Vertx">
+<meta name="twitter:card" content="summary">
+
+<link rel="canonical" href="https://www.krivers.fun/posts/6a250a7b/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh-CN'
+  };
+</script>
+
+  <title>Vertx实战之如何追踪异步函数调用 | 穹柏</title>
+  
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-VYC4XMLJP0"></script>
+    <script data-pjax>
+      if (CONFIG.hostname === location.hostname) {
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){dataLayer.push(arguments);}
+        gtag('js', new Date());
+        gtag('config', 'G-VYC4XMLJP0');
+      }
+    </script>
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+<link rel="alternate" href="/atom.xml" title="穹柏" type="application/atom+xml">
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="切换导航栏">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">穹柏</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+      <p class="site-subtitle" itemprop="description">疏影横斜水清浅，暗香浮动月黄昏</p>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>首页</a>
+
+  </li>
+        <li class="menu-item menu-item-about">
+
+    <a href="/about/" rel="section"><i class="fa fa-user fa-fw"></i>关于</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>标签</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>分类</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>归档</a>
+
+  </li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>搜索
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+        <div class="search-header">
+  <span class="search-icon">
+    <i class="fa fa-search"></i>
+  </span>
+  <div class="search-input-container">
+    <input autocomplete="off" autocapitalize="off"
+           placeholder="搜索..." spellcheck="false"
+           type="search" class="search-input">
+  </div>
+  <span class="popup-btn-close">
+    <i class="fa fa-times-circle"></i>
+  </span>
+</div>
+<div id="search-result">
+  <div id="no-result">
+    <i class="fa fa-spinner fa-pulse fa-5x fa-fw"></i>
+  </div>
+</div>
+
+    </div>
+  </div>
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="https://www.krivers.fun/posts/6a250a7b/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.jpg">
+      <meta itemprop="name" content="穹柏">
+      <meta itemprop="description" content="My Blog">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="穹柏">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          Vertx实战之如何追踪异步函数调用
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">发表于</span>
+
+              <time title="创建时间：2021-06-03 19:31:41" itemprop="dateCreated datePublished" datetime="2021-06-03T19:31:41+08:00">2021-06-03</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">更新于</span>
+                <time title="修改时间：2023-11-29 14:33:26" itemprop="dateModified" datetime="2023-11-29T14:33:26+08:00">2023-11-29</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">分类于</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/%E6%8A%80%E6%9C%AF/" itemprop="url" rel="index"><span itemprop="name">技术</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="阅读次数" id="busuanzi_container_page_pv" style="display: none;">
+              <span class="post-meta-item-icon">
+                <i class="fa fa-eye"></i>
+              </span>
+              <span class="post-meta-item-text">阅读次数：</span>
+              <span id="busuanzi_value_page_pv"></span>
+            </span><br>
+            <span class="post-meta-item" title="本文字数">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+                <span class="post-meta-item-text">本文字数：</span>
+              <span>3.3k</span>
+            </span>
+            <span class="post-meta-item" title="阅读时长">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+                <span class="post-meta-item-text">阅读时长 &asymp;</span>
+              <span>6 分钟</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <h1 id="背景"><a href="#背景" class="headerlink" title="背景"></a>背景</h1><p>日常开发中我们经常需要处理各种系统问题，而这些系统问题通常由一些非预期的因素引起（比如非预期的输入，内存不够，网络波动等）。此时就需要知道</p>
+<ol>
+<li>本次系统问题影响了谁？</li>
+<li>如果本次系统问题是因为非预期的输入而导致的，那么这个非预期的输入是什么？</li>
+</ol>
+<p>上述两点在同步编程里可以通过全局try-catch来实现。但在异步编程里该怎么办呢？</p>
+<hr>
+<h1 id="思路"><a href="#思路" class="headerlink" title="思路"></a>思路</h1><p>我的想法是绑定一个唯一id到一次完整的请求调用中（这个完整取决于我们想要监控的范围），无论程序执行到何处，我们总能拿到与请求一一对应的<code>调用上下文</code>的id。</p>
+<p>  我将分两种场景进行讨论。一种是同步或基于jut下的线程池类进行异步调用的应用程序（如基于spring5之前的应用程序）。另外一种基于vertx（底层基于netty）的应用程序。</p>
+<hr>
+<h2 id="技术栈"><a href="#技术栈" class="headerlink" title="技术栈"></a>技术栈</h2><p><code>vert.x 4</code>、<code>netty 4</code>、<a target="_blank" rel="noopener" href="https://github.com/alibaba/transmittable-thread-local"><code>alibaba TransmittableThreadLocal</code></a>、<code>jboss javassist</code>、hotspot类加载&amp;方法调用</p>
+<hr>
+<h2 id="1-同步or基于jdk的异步"><a href="#1-同步or基于jdk的异步" class="headerlink" title="1. 同步or基于jdk的异步"></a>1. 同步or基于jdk的异步</h2><p><strong>关于这种场景，有以下几种实现：</strong></p>
+<ol>
+<li><p><strong>程序中的函数调用是完全同步的</strong></p>
+<p> 则可通过<code>java.lang.ThreadLocal</code>绑定一个唯一id到当前线程。入口处生成，出口处销毁。<br> 如果我们用的是logback，也可通过 <code>org.slf4j.MDC</code> 来实现这个功能。其内部也是基于ThreadLocal。</p>
+</li>
+<li><p><strong>程序中函数调用是异步的，异步通过新建<code>java.lang.Thread</code> 的方式实现。</strong></p>
+<p> 这里可通过<code>java.lang.InheritableThreadLocal</code> 绑定一个唯一id到当前线程。<code>Thread</code>的构造函数里会自动把通过<code>InheritableThreadLocal</code> 绑定到当前线程的数据拷贝到这个正在创建的<code>Thread</code> 里。所以，只要这个<code>Thread</code> 是在我们<strong>需要监控的区域（当前线程通过</strong><code>InheritableThreadLocal</code><strong>绑定了id后）</strong>创建的，就能实现这个唯一id的跨线程传递。</p>
+</li>
+<li><p><strong>程序中函数调用是异步的，异步通过<code>java.util.concurrent</code> 下的线程池类实现。</strong></p>
+<p> 由于线程池中的线程是可以复用的，所以，如果我们往线程池中丢任务时，有两种情况：</p>
+<ol>
+<li>线程池创建新的线程来执行该任务（比如线程池中的线程数&lt;coreSize）。这种情况下<code>InheritableThreadLocal</code> 依然是有效的。</li>
+<li>线程池把任务分配给了已有线程（比如线程池中的线程数≥coreSize并且待执行任务队列没有填满）。这种情况下<code>InheritableThreadLocal</code> 是无法生效的（线程池中的存活线程会循环拉取等待任务队列中的task去执行，而这个过程是没有<code>InheritableThreadLocal</code> 拷贝的）。所以，这里可以用阿里的<code>[TransmittableThreadLocal](https://github.com/alibaba/transmittable-thread-local)</code> 组件来实现这个唯一id在线程池中的传递（其核心原理是在<code>Runnable</code> 中用一个变量来存储当前线程的ThreadLocal值，当线程执行此Runnable时再拿出来）。</li>
+</ol>
+</li>
+</ol>
+<hr>
+<h3 id="实现思路总结"><a href="#实现思路总结" class="headerlink" title="实现思路总结"></a>实现思路总结</h3><p>  异步环境下的关键在于如何跨线程传递ThreadLocal的值</p>
+<hr>
+<h2 id="2-Vertx-中的实现"><a href="#2-Vertx-中的实现" class="headerlink" title="2. Vertx 中的实现"></a>2. Vertx 中的实现</h2><p>  <code>vertx</code>是一个类似于<code>spring</code>系列的用于构建分布式微服务的框架。基于<code>vertx</code>构建的应用程序最大的特点是<strong>无阻塞</strong>&amp;<strong>全异步。</strong></p>
+<p>  vertx里的异步主要分两种。一种是在eventbus上传递消息的异步。另一种是基于netty的io操作异步</p>
+<h3 id="1-eventbus上异步传递消息"><a href="#1-eventbus上异步传递消息" class="headerlink" title="1. eventbus上异步传递消息"></a>1. eventbus上异步传递消息</h3><p>   先来看一个简单的示例程序</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">static</span> <span class="keyword">final</span> String ADDRESS_1 = <span class="string">&quot;address1&quot;</span>;</span><br><span class="line"> <span class="keyword">static</span> <span class="keyword">final</span> String MESSAGE_1 = <span class="string">&quot;message1&quot;</span>;</span><br><span class="line"> <span class="keyword">static</span> <span class="keyword">final</span> String REPLY_MESSAGE_1 = <span class="string">&quot;replyMessage1&quot;</span>;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">void</span> <span class="title">sendMsgByEventbus</span><span class="params">()</span> </span>&#123;</span><br><span class="line">       <span class="comment">//初始化一个具有默认设置的vertx实例</span></span><br><span class="line">       Vertx vertx = Vertx.vertx();</span><br><span class="line"></span><br><span class="line">       <span class="comment">//注册一个handler/consumer到eventbus</span></span><br><span class="line">       vertx.eventBus().consumer(ADDRESS_1, event -&gt; &#123;</span><br><span class="line">           log.info(<span class="string">&quot;receive msg:&#123;&#125;&quot;</span>, event.body());</span><br><span class="line">           event.reply(REPLY_MESSAGE_1);</span><br><span class="line">       &#125;);</span><br><span class="line"></span><br><span class="line">       <span class="comment">//通过eventbus发送消息给刚注册的handler</span></span><br><span class="line">       vertx.eventBus().request(ADDRESS_1, MESSAGE_1, reply -&gt; &#123;</span><br><span class="line">           log.info(<span class="string">&quot;receive replied msg:&#123;&#125;&quot;</span>, reply.result().body());</span><br><span class="line">       &#125;);</span><br><span class="line">   &#125;</span><br></pre></td></tr></table></figure>
+
+<p>下面是程序执行的结果</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">[vert.x-eventloop-thread-<span class="number">0</span>] - receive msg:message1</span><br><span class="line">[vert.x-eventloop-thread-<span class="number">0</span>] - receive replied msg:replyMessage1</span><br></pre></td></tr></table></figure>
+
+<p>可以看到发起调用的是主线程，处理调用跟处理回调的是线程<code>vert.x-eventloop-thread-0</code>。</p>
+<p>那么，这个异步是如何实现的呢？显然，异步最明显的体现就是最后发送消息这里。所以我们就从<code>Eventbus#request</code> 逐步深入。</p>
+<p><strong>大概流程是这样的：</strong></p>
+<ol>
+<li>从<code>eventbus</code>中根据我们传入的<code>address</code>拿到所有注册到这个地址上的handler。</li>
+<li>将对应<code>handler</code>对传入消息的处理包装成一个<code>runnable</code>丢进一个<code>queue</code></li>
+<li><code>eventLoop Thread</code>从这个<code>queue</code>中抓取<code>task</code>执行</li>
+</ol>
+<p><strong>关键代码片段如下：</strong></p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br><span class="line">86</span><br><span class="line">87</span><br><span class="line">88</span><br><span class="line">89</span><br><span class="line">90</span><br><span class="line">91</span><br><span class="line">92</span><br><span class="line">93</span><br><span class="line">94</span><br><span class="line">95</span><br><span class="line">96</span><br><span class="line">97</span><br><span class="line">98</span><br><span class="line">99</span><br><span class="line">100</span><br><span class="line">101</span><br><span class="line">102</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">//与本主题无关的只展示调用链路供大家参考</span></span><br><span class="line"><span class="comment">//Eventbus#request</span></span><br><span class="line"><span class="comment">//  EventbusImpl#request</span></span><br><span class="line"><span class="comment">//    EventbusImpl#sendOrPubInternal</span></span><br><span class="line"><span class="comment">//      EventbusImpl#sendOrPubInternal</span></span><br><span class="line"><span class="comment">//        EventbusImpl#OutboundDeliveryContext</span></span><br><span class="line"><span class="comment">//          EventbusImpl#sendOrPub</span></span><br><span class="line"><span class="comment">//            EventbusImpl#sendLocally</span></span><br><span class="line"><span class="comment">//              EventbusImpl#deliverMessageLocally</span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">protected</span> ReplyException <span class="title">deliverMessageLocally</span><span class="params">(MessageImpl msg)</span> </span>&#123;</span><br><span class="line">	  <span class="comment">//1.找出跟msg.address()的handlerHolder</span></span><br><span class="line">	  ConcurrentCyclicSequence&lt;HandlerHolder&gt; handlers = handlerMap.get(msg.address());</span><br><span class="line">	  <span class="keyword">if</span> (handlers != <span class="keyword">null</span>) &#123;</span><br><span class="line">	    <span class="keyword">for</span> (HandlerHolder holder: handlers) &#123;</span><br><span class="line">		  <span class="comment">//2.依次调用这些handler的receive方法</span></span><br><span class="line">	      holder.handler.receive(msg.copyBeforeReceive());</span><br><span class="line">	    &#125;</span><br><span class="line">	    <span class="keyword">return</span> <span class="keyword">null</span>;</span><br><span class="line">	  &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">receive</span><span class="params">(MessageImpl msg)</span> </span>&#123;</span><br><span class="line">	  <span class="comment">//3.匿名异步任务进队列</span></span><br><span class="line">	  context.nettyEventLoop().execute(() -&gt; &#123;</span><br><span class="line">	     doReceive(msg);</span><br><span class="line">	  &#125;);</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">//SingleThreadEventExecutor#execute</span></span><br><span class="line"><span class="function"><span class="keyword">private</span> <span class="keyword">void</span> <span class="title">execute</span><span class="params">(Runnable task, <span class="keyword">boolean</span> immediate)</span> </span>&#123;</span><br><span class="line">	<span class="comment">//比较当前线程是否是eventLoop线程，是则返回true</span></span><br><span class="line">	<span class="comment">//由于我们在main里调用的eventbus#request,所以这里是false</span></span><br><span class="line">    <span class="keyword">boolean</span> inEventLoop = inEventLoop();</span><br><span class="line"></span><br><span class="line">	<span class="comment">//4. 添加到queue中，后面执行任务的线程会调用该queue的poll方法</span></span><br><span class="line">    addTask(task);</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (!inEventLoop) &#123;</span><br><span class="line">		<span class="comment">//如果当前eventLoop对象的thread为空则创建一个Thread绑定到当前eventLoop</span></span><br><span class="line">        startThread();</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">//eventLoop中运行的thread通过这个方法从上面说的queue中拿task执行</span></span><br><span class="line"><span class="comment">//外层会循环执行该runAllTasks，直到Eventloop#shutdownGracefully被执行</span></span><br><span class="line"><span class="comment">//参考NioEventLoop#run</span></span><br><span class="line"><span class="function"><span class="keyword">protected</span> <span class="keyword">boolean</span> <span class="title">runAllTasks</span><span class="params">(<span class="keyword">long</span> timeoutNanos)</span> </span>&#123;</span><br><span class="line">      Runnable task = pollTask();</span><br><span class="line">      </span><br><span class="line">      <span class="keyword">for</span> (;;) &#123;</span><br><span class="line">		  <span class="comment">//5.执行task</span></span><br><span class="line">          safeExecute(task);</span><br><span class="line"></span><br><span class="line">          runTasks ++;</span><br><span class="line">					</span><br><span class="line">		  <span class="comment">//如果队列中还有task，则继续执行</span></span><br><span class="line">          task = pollTask();</span><br><span class="line">          <span class="keyword">if</span> (task == <span class="keyword">null</span>) &#123;</span><br><span class="line">              lastExecutionTime = ScheduledFutureTask.nanoTime();</span><br><span class="line">              <span class="keyword">break</span>;</span><br><span class="line">          &#125;</span><br><span class="line">      &#125;</span><br><span class="line">      <span class="keyword">return</span> <span class="keyword">true</span>;</span><br><span class="line">  &#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">protected</span> <span class="keyword">static</span> Runnable <span class="title">pollTaskFrom</span><span class="params">(Queue&lt;Runnable&gt; taskQueue)</span> </span>&#123;</span><br><span class="line">    <span class="keyword">for</span> (;;) &#123;</span><br><span class="line">        Runnable task = taskQueue.poll();</span><br><span class="line">        <span class="keyword">if</span> (task != WAKEUP_TASK) &#123;</span><br><span class="line">            <span class="keyword">return</span> task;</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">//safeExecute会去执行第3步中的匿名任务</span></span><br><span class="line"><span class="function"><span class="keyword">protected</span> <span class="keyword">boolean</span> <span class="title">doReceive</span><span class="params">(Message&lt;T&gt; message)</span> </span>&#123;</span><br><span class="line">		Handler&lt;Message&lt;T&gt;&gt; theHandler = handler;</span><br><span class="line">		</span><br><span class="line">		deliver(theHandler, message);</span><br><span class="line">		<span class="keyword">return</span> <span class="keyword">true</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">//MessageConsumerImpl#deliver</span></span><br><span class="line"><span class="comment">//  MessageConsumerImpl#dispatch</span></span><br><span class="line"><span class="comment">//    AbstractContext#dispatch</span></span><br><span class="line"><span class="comment">//      InboundDeliveryContext#dispatch   ++ 上一步的匿名Runnable会调用 </span></span><br><span class="line"><span class="comment">//        InboundDeliveryContext#next</span></span><br><span class="line"><span class="comment">//          MessageConsumerImpl#dispatch</span></span><br><span class="line"><span class="comment">//            DuplicatedContext#emit</span></span><br><span class="line"><span class="comment">//              EventLoopContext#emit</span></span><br><span class="line">&lt;T&gt; <span class="function"><span class="keyword">void</span> <span class="title">emit</span><span class="params">(AbstractContext ctx, T argument, Handler&lt;T&gt; task)</span> </span>&#123;</span><br><span class="line">    <span class="keyword">try</span> &#123;</span><br><span class="line">	  <span class="comment">//6.执行handler/task中的事件处理</span></span><br><span class="line">	  <span class="comment">//这个task就是我们之前通过Eventbus#consumer注册进来的</span></span><br><span class="line">      task.handle(argument);</span><br><span class="line">    &#125; <span class="keyword">catch</span> (Throwable t) &#123;</span><br><span class="line">      reportException(t);</span><br><span class="line">    &#125; <span class="keyword">finally</span> &#123;</span><br><span class="line">      ctx.endDispatch(prev);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>我删减了一些不重要的部分，以便更易于理解。</p>
+<p>通过上面的代码片段我们可以发现，第3步的<code>SingleThreadEventExecutor#execute</code>往队列里push任务似乎是解决问题（跨线程传递唯一id）的关键。所以，如果我们能够<strong>在这个task进入<code>queue</code>之前往这个task中塞上当前线程的<code>ThreadLocal</code>值，待到这个<code>task</code>的<code>run</code>方法被执行时再把这个<code>ThreadLocal</code>值拿出来塞到当前线程（执行这个<code>task</code>的线程）的<code>ThreadLocal</code>中</strong>，问题就解决了。</p>
+<p>显然，我们需要修改这些类的代码。那么，怎么实现这个功能呢？</p>
+<p><code>java.lang.instrument</code> 提供了一系列运行时替换class字节码的技术。而<a target="_blank" rel="noopener" href="https://github.com/jboss-javassist/javassist">jboss Javaassist</a> 则提供了一些列修改字节码的接口。所以我们只需要结合这两项技术再通过javaagent指令即可达成我们的目的。</p>
+<p>修改字节码的实现可参考<a target="_blank" rel="noopener" href="https://github.com/scientificCommunity/blog-sample/blob/main/vertx4-transformer/src/main/java/org/baichuan/example/vertx/transformer/VertxFutureTransformer.java">这里</a>。</p>
+<hr>
+<h4 id="关于类加载"><a href="#关于类加载" class="headerlink" title="关于类加载"></a>关于类加载</h4><p>由于<strong>参与修改</strong>的<strong>所有类</strong>都是由**<code>appClassLoader</code><strong>加载的，所以不会出现什么问题。但是，如果我们要按照上述设计对</strong>jdk自带(jre/lib)的一些类<strong>进行修改呢？比如说实现<code>ThreadLocal</code>在<code>ThreadPoolExecutor#execute</code>中的传递，思路似乎没多大区别，无非就是对传入<code>ThreadPoolExecutor#execute</code>中的<code>Runnable</code>做一层包装（设该包装类为</strong>类A<strong>）。然后当我们运行是却会发现每次执行<code>execute</code>方法时都会得到一个<code>NoClassDefFoundException</code>，无法找到</strong>类A**。</p>
+<p>这是为什么呢？明明<strong>类A</strong>对应的<code>class</code>文件是<strong>存在的</strong>(build目录下)，但虚拟机为什么在执行<code>execute</code>方法时找不到它呢？</p>
+<p>这是因为<code>ThreadPoolExecutor</code>这个类是由<code>BootStrapClassLoader</code>加载的，而正常情况下类A并不处于<code>BootStrapClassLoader</code>的查找范围之中，所以就引发了这个异常。概览如下：</p>
+<ul>
+<li>在虚拟机第一次执行到<code>execute</code>方法中我们修改过的代码时，此时类A在此处仅仅是一个符号引用，这时必然会请求虚拟机去<a target="_blank" rel="noopener" href="http://hg.openjdk.java.net/jdk8/jdk8/hotspot/file/87ee5ee27509/src/share/vm/oops/constantPool.cpp#l180">解析</a>这个符号引用。这里会去根据<a target="_blank" rel="noopener" href="http://hg.openjdk.java.net/jdk8/jdk8/hotspot/file/87ee5ee27509/src/share/vm/oops/constantPool.cpp#l212">加载ThreadPoolExecutor的类加载器</a>(<code>BootStrapClassLoader</code>)以及<strong>类A</strong>的类名在内存中<a target="_blank" rel="noopener" href="http://hg.openjdk.java.net/jdk8/jdk8/hotspot/file/87ee5ee27509/src/share/vm/classfile/systemDictionary.cpp#l616">全局查找这个类</a>，查找不到则会尝试<a target="_blank" rel="noopener" href="http://hg.openjdk.java.net/jdk8/jdk8/hotspot/file/87ee5ee27509/src/share/vm/classfile/systemDictionary.cpp#l1289">加载这个类</a>，如果这两个过程都找不到对应的类，就会抛出上述异常。</li>
+</ul>
+<p>像alibaba的<a target="_blank" rel="noopener" href="https://github.com/alibaba/transmittable-thread-local"><code>TransmittableThreadLocal</code></a> 是需要修改rt.jar中的类的(比如<code>ThreadPoolExecutor</code>)，这些核心类都是由BootstrapClassloader加载的。但是我们引进来的<a target="_blank" rel="noopener" href="https://github.com/alibaba/transmittable-thread-local"><code>TransmittableThreadLocal</code></a> 默认由AppClassLoader加载，这势必会导致在重新加载被修改的由class时抛出NoClassDefFoundException。所以<a target="_blank" rel="noopener" href="https://github.com/alibaba/transmittable-thread-local"><code>TransmittableThreadLocal</code></a> 中<strong>参与核心类库修改的类必须要被添加到bootClassPath中</strong>(由<code>BootstrapClassLoader</code>加载)。</p>
+<h3 id="2-基于netty的异步io操作"><a href="#2-基于netty的异步io操作" class="headerlink" title="2. 基于netty的异步io操作"></a>2. 基于netty的异步io操作</h3><p>vertx的io操作基于netty，netty的io多路复用基于java nio，nio只能说是非阻塞式io。但是netty提供给上层应用程序的io操作确实异步的。netty会不停的轮询就绪的io事件，然后把vertx感兴趣的事件包装好通知到vertx（比如有数据可读的时候），最后vertx再通知到我们的业务层。</p>
+<p>其实这里的实现思路是一样的，就不赘述了。简单点就是在往vertx中塞回调时对这个回调进行上述包装即可。</p>
+<hr>
+<h1 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h1><p>本文主要探讨了如何在基于vertx的异步环境中追踪一次完整的函数调用，以及实现过程中可能会碰到的问题。</p>
+<p>上述内容的源码可在<a target="_blank" rel="noopener" href="https://github.com/scientificCommunity/blog-sample">我的github</a>上找到。</p>
+
+    </div>
+
+    
+    
+    
+      
+  <div class="popular-posts-header">推荐内容</div>
+  <ul class="popular-posts">
+    <li class="popular-posts-item">
+      <div class="popular-posts-title"><a href="/posts/8ccc4590/" rel="bookmark">GC调优之避免临时对象进入老年代思路浅析</a></div>
+    </li>
+    <li class="popular-posts-item">
+      <div class="popular-posts-title"><a href="/posts/34050/" rel="bookmark">Mysql之浅析AUTO_INCREMENT</a></div>
+    </li>
+    <li class="popular-posts-item">
+      <div class="popular-posts-title"><a href="/posts/7dfe0119/" rel="bookmark">Auto DevOps之gitlab CI/CD</a></div>
+    </li>
+    <li class="popular-posts-item">
+      <div class="popular-posts-title"><a href="/posts/f0ea53d7/" rel="bookmark">Spring源码浅析之@Autowired如何解决循环依赖</a></div>
+    </li>
+    <li class="popular-posts-item">
+      <div class="popular-posts-title"><a href="/posts/34049/" rel="bookmark">Mysql之浅析INSERT ON DUPLICATE</a></div>
+    </li>
+  </ul>
+
+        
+
+<div>
+<ul class="post-copyright">
+  <li class="post-copyright-author">
+    <strong>本文作者： </strong>穹柏
+  </li>
+  <li class="post-copyright-link">
+    <strong>本文链接：</strong>
+    <a href="https://www.krivers.fun/posts/6a250a7b/" title="Vertx实战之如何追踪异步函数调用">https://www.krivers.fun/posts/6a250a7b/</a>
+  </li>
+  <li class="post-copyright-license">
+    <strong>版权声明： </strong>本博客所有文章除特别声明外，均采用 <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" rel="noopener" target="_blank"><i class="fab fa-fw fa-creative-commons"></i>BY-NC-SA</a> 许可协议。转载请注明出处！
+  </li>
+</ul>
+</div>
+
+        
+
+  <div class="followme">
+    <p>欢迎关注我的其它发布渠道</p>
+
+    <div class="social-list">
+
+        <div class="social-item">
+          <a target="_blank" class="social-link" href="/atom.xml">
+            <span class="icon">
+              <i class="fa fa-rss"></i>
+            </span>
+
+            <span class="label">RSS</span>
+          </a>
+        </div>
+    </div>
+  </div>
+
+
+      <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/%E6%8A%80%E6%9C%AF/" rel="tag"># 技术</a>
+              <a href="/tags/jvm/" rel="tag"># jvm</a>
+              <a href="/tags/%E5%AE%9E%E6%88%98/" rel="tag"># 实战</a>
+              <a href="/tags/Vertx/" rel="tag"># Vertx</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/posts/a1887a80/" rel="prev" title="单元测试之kotlin mockk用法浅析">
+      <i class="fa fa-chevron-left"></i> 单元测试之kotlin mockk用法浅析
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/posts/bb46fe66/" rel="next" title="随笔之Http为什么经常被吐槽慢？">
+      随笔之Http为什么经常被吐槽慢？ <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          文章目录
+        </li>
+        <li class="sidebar-nav-overview">
+          站点概览
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#%E8%83%8C%E6%99%AF"><span class="nav-number">1.</span> <span class="nav-text">背景</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E6%80%9D%E8%B7%AF"><span class="nav-number">2.</span> <span class="nav-text">思路</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%8A%80%E6%9C%AF%E6%A0%88"><span class="nav-number">2.1.</span> <span class="nav-text">技术栈</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#1-%E5%90%8C%E6%AD%A5or%E5%9F%BA%E4%BA%8Ejdk%E7%9A%84%E5%BC%82%E6%AD%A5"><span class="nav-number">2.2.</span> <span class="nav-text">1. 同步or基于jdk的异步</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%AE%9E%E7%8E%B0%E6%80%9D%E8%B7%AF%E6%80%BB%E7%BB%93"><span class="nav-number">2.2.1.</span> <span class="nav-text">实现思路总结</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#2-Vertx-%E4%B8%AD%E7%9A%84%E5%AE%9E%E7%8E%B0"><span class="nav-number">2.3.</span> <span class="nav-text">2. Vertx 中的实现</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#1-eventbus%E4%B8%8A%E5%BC%82%E6%AD%A5%E4%BC%A0%E9%80%92%E6%B6%88%E6%81%AF"><span class="nav-number">2.3.1.</span> <span class="nav-text">1. eventbus上异步传递消息</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%85%B3%E4%BA%8E%E7%B1%BB%E5%8A%A0%E8%BD%BD"><span class="nav-number">2.3.1.1.</span> <span class="nav-text">关于类加载</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#2-%E5%9F%BA%E4%BA%8Enetty%E7%9A%84%E5%BC%82%E6%AD%A5io%E6%93%8D%E4%BD%9C"><span class="nav-number">2.3.2.</span> <span class="nav-text">2. 基于netty的异步io操作</span></a></li></ol></li></ol></li><li class="nav-item nav-level-1"><a class="nav-link" href="#%E6%80%BB%E7%BB%93"><span class="nav-number">3.</span> <span class="nav-text">总结</span></a></li></ol></div>
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="穹柏"
+      src="/images/avatar.jpg">
+  <p class="site-author-name" itemprop="name">穹柏</p>
+  <div class="site-description" itemprop="description">My Blog</div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">19</span>
+          <span class="site-state-item-name">日志</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/categories/">
+          
+        <span class="site-state-item-count">1</span>
+        <span class="site-state-item-name">分类</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/tags/">
+          
+        <span class="site-state-item-count">17</span>
+        <span class="site-state-item-name">标签</span></a>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author motion-element">
+      <span class="links-of-author-item">
+        <a href="https://github.com/scientificCommunity" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;scientificCommunity" rel="noopener" target="_blank"><i class="fab fa-github fa-fw"></i>GitHub</a>
+      </span>
+      <span class="links-of-author-item">
+        <a href="mailto:rivers.boat.snow@gmail.com" title="E-Mail → mailto:rivers.boat.snow@gmail.com" rel="noopener" target="_blank"><i class="fa fa-envelope fa-fw"></i>E-Mail</a>
+      </span>
+      <span class="links-of-author-item">
+        <a href="https://stackoverflow.com/users/15755323/krivers" title="StackOverflow → https:&#x2F;&#x2F;stackoverflow.com&#x2F;users&#x2F;15755323&#x2F;krivers" rel="noopener" target="_blank"><i class="fab fa-stack-overflow fa-fw"></i>StackOverflow</a>
+      </span>
+  </div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2023</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">穹柏</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+      <span class="post-meta-item-text">站点总字数：</span>
+    <span title="站点总字数">26k</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+      <span class="post-meta-item-text">站点阅读时长 &asymp;</span>
+    <span title="站点阅读时长">47 分钟</span>
+</div>
+
+        
+<div class="busuanzi-count">
+  <script data-pjax async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+    <span class="post-meta-item" id="busuanzi_container_site_uv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="fa fa-user"></i>
+      </span>
+      <span class="site-uv" title="总访客量">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="fa fa-eye"></i>
+      </span>
+      <span class="site-pv" title="总访问量">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="/lib/pjax/pjax.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+  <script>
+var pjax = new Pjax({
+  selectors: [
+    'head title',
+    '#page-configurations',
+    '.content-wrap',
+    '.post-toc-wrap',
+    '.languages',
+    '#pjax'
+  ],
+  switches: {
+    '.post-toc-wrap': Pjax.switches.innerHTML
+  },
+  analytics: false,
+  cacheBust: false,
+  scrollTo : !CONFIG.bookmark.enable
+});
+
+window.addEventListener('pjax:success', () => {
+  document.querySelectorAll('script[data-pjax], script#page-configurations, #pjax script').forEach(element => {
+    var code = element.text || element.textContent || element.innerHTML || '';
+    var parent = element.parentNode;
+    parent.removeChild(element);
+    var script = document.createElement('script');
+    if (element.id) {
+      script.id = element.id;
+    }
+    if (element.className) {
+      script.className = element.className;
+    }
+    if (element.type) {
+      script.type = element.type;
+    }
+    if (element.src) {
+      script.src = element.src;
+      // Force synchronous loading of peripheral JS.
+      script.async = false;
+    }
+    if (element.dataset.pjax !== undefined) {
+      script.dataset.pjax = '';
+    }
+    if (code !== '') {
+      script.appendChild(document.createTextNode(code));
+    }
+    parent.appendChild(script);
+  });
+  NexT.boot.refresh();
+  // Define Motion Sequence & Bootstrap Motion.
+  if (CONFIG.motion.enable) {
+    NexT.motion.integrator
+      .init()
+      .add(NexT.motion.middleWares.subMenu)
+      .add(NexT.motion.middleWares.postList)
+      .bootstrap();
+  }
+  NexT.utils.updateSidebarPosition();
+});
+</script>
+
+
+
+
+  
+
+
+
+
+  
+<script src="/js/local-search.js"></script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+    <div id="pjax">
+  
+
+  
+
+    </div>
+</body>
+</html>
